@@ -1,0 +1,17 @@
+{
+  "name": "lucid-webhook",
+  "version": "1.0.0",
+  "description": "Endpoint HTTP que Lucid Bot consulta para saber la disponibilidad de palcos en tiempo real (lee directo de Firestore, mismo proyecto que palco-reservas).",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "license": "ISC",
+  "type": "commonjs",
+  "engines": {
+    "node": "20"
+  },
+  "dependencies": {
+    "firebase": "^12.16.0"
+  }
+}
