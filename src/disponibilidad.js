@@ -21,6 +21,39 @@ function sillasOcupadas(reservasDelDia = []) {
     .reduce((total, r) => total + (r.cantidad || 0), 0);
 }
 
+function formatearPesos(valor) {
+  return `$${valor.toLocaleString("es-CO")}`;
+}
+
+// Cada palco completo puede tener su propio precio (se asigna palco por palco
+// desde el botón "Precio Palco" en palco-reservas); si un palco todavía no tiene
+// uno propio, cae al precio general de feria/configuracion.precioPalcoCompleto.
+// Como Lucid solo puede mapear campos fijos (no listas de tamaño variable), acá
+// se arma tanto la agrupación cruda (porPrecio) como un texto ya listo
+// (resumenPrecios) para insertar directo en el mensaje del bot.
+function agruparPorPrecio(completosDisponibles, precioPorDefecto) {
+  const grupos = new Map();
+  for (const p of completosDisponibles) {
+    const precio = p.precio ?? precioPorDefecto;
+    if (!grupos.has(precio)) grupos.set(precio, []);
+    grupos.get(precio).push(p.numero);
+  }
+
+  const porPrecio = [...grupos.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([precio, numeros]) => ({
+      precio,
+      cantidad: numeros.length,
+      numeros: numeros.sort((a, b) => a - b),
+    }));
+
+  const resumenPrecios = porPrecio
+    .map((g) => `${g.cantidad} palco${g.cantidad === 1 ? "" : "s"} a ${formatearPesos(g.precio)} (número${g.cantidad === 1 ? "" : "s"} ${g.numeros.join(", ")})`)
+    .join(" y ");
+
+  return { porPrecio, resumenPrecios };
+}
+
 async function obtenerDisponibilidad() {
   const [palcosSnap, configSnap] = await Promise.all([
     getDoc(doc(db, "feria", "palcos")),
@@ -32,8 +65,9 @@ async function obtenerDisponibilidad() {
 
   const completosDisponibles = palcos
     .filter((p) => p.tipo === "completo" && p.estado === "disponible")
-    .map((p) => p.numero)
-    .sort((a, b) => a - b);
+    .sort((a, b) => a.numero - b.numero);
+
+  const { porPrecio, resumenPrecios } = agruparPorPrecio(completosDisponibles, precioPalcoCompleto);
 
   const sillas = {};
   for (const dia of DIAS) {
@@ -54,8 +88,9 @@ async function obtenerDisponibilidad() {
     actualizado: new Date().toISOString(),
     palcosCompletos: {
       disponibles: completosDisponibles.length,
-      numeros: completosDisponibles,
-      precio: precioPalcoCompleto,
+      numeros: completosDisponibles.map((p) => p.numero),
+      porPrecio,
+      resumenPrecios,
     },
     sillas,
   };
