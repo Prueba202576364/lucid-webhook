@@ -1,11 +1,12 @@
-// Crea (una sola vez) y mantiene el Google Sheet de inscripciones, usando una
-// cuenta de servicio de Google Cloud — nadie tiene que iniciar sesión, es
-// autenticación servidor-a-servidor. La cuenta de servicio es la "dueña" del
-// Sheet que crea, así que se comparte automáticamente con GOOGLE_SHEET_SHARE_WITH
-// para que aparezca en el Drive de una persona real.
+// Agrega filas al Google Sheet de inscripciones, usando una cuenta de servicio
+// de Google Cloud — nadie tiene que iniciar sesión, es autenticación
+// servidor-a-servidor. Las cuentas de servicio no tienen cuota propia de Drive
+// en cuentas personales, así que NO crean el Sheet — el Sheet lo crea una
+// persona real y se lo comparte (como Editor) a la cuenta de servicio; acá solo
+// se escribe en uno que ya existe (GOOGLE_SHEET_ID).
 const { google } = require("googleapis");
 
-const SCOPES = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive.file"];
+const SCOPES = ["https://www.googleapis.com/auth/spreadsheets"];
 
 function auth() {
   const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
@@ -16,49 +17,27 @@ function auth() {
   return new google.auth.JWT({ email, key, scopes: SCOPES });
 }
 
-// Si GOOGLE_SHEET_ID ya está configurado, se reutiliza siempre ese Sheet.
-// Si no, se crea uno nuevo la primera vez que se necesita — después de eso hay
-// que copiar el ID que se imprime en el log y guardarlo en GOOGLE_SHEET_ID,
-// para no crear un Sheet distinto en cada arranque del servidor.
-async function obtenerOCrearSheetId(titulo, nombreHoja, encabezados) {
-  if (process.env.GOOGLE_SHEET_ID) return process.env.GOOGLE_SHEET_ID;
-
-  const authClient = auth();
-  const sheets = google.sheets({ version: "v4", auth: authClient });
-  const drive = google.drive({ version: "v3", auth: authClient });
-
-  const { data } = await sheets.spreadsheets.create({
-    requestBody: {
-      properties: { title: titulo },
-      sheets: [{ properties: { title: nombreHoja } }],
-    },
-  });
-  const sheetId = data.spreadsheetId;
-
-  await sheets.spreadsheets.values.append({
-    spreadsheetId: sheetId,
-    range: `${nombreHoja}!A1`,
-    valueInputOption: "RAW",
-    requestBody: { values: [encabezados] },
-  });
-
-  const compartirCon = process.env.GOOGLE_SHEET_SHARE_WITH;
-  if (compartirCon) {
-    await drive.permissions.create({
-      fileId: sheetId,
-      sendNotificationEmail: true,
-      requestBody: { type: "user", role: "writer", emailAddress: compartirCon },
-    });
-  }
-
-  console.log(`Google Sheet creado: https://docs.google.com/spreadsheets/d/${sheetId} — guarda este ID en GOOGLE_SHEET_ID.`);
-  return sheetId;
+// El nombre real de la pestaña dentro del Sheet puede no ser el que
+// esperábamos (la persona lo pudo renombrar, o Google le puso "Hoja 1" por
+// defecto al importar el CSV) — en vez de asumirlo, se pregunta cuál es la
+// primera pestaña real y se usa esa.
+async function primeraPestana(sheets, sheetId) {
+  const { data } = await sheets.spreadsheets.get({ spreadsheetId: sheetId });
+  return data.sheets[0].properties.title;
 }
 
-async function agregarFila(titulo, nombreHoja, encabezados, fila) {
-  const sheetId = await obtenerOCrearSheetId(titulo, nombreHoja, encabezados);
+async function agregarFila(titulo, nombreHojaSugerido, encabezados, fila) {
+  const sheetId = process.env.GOOGLE_SHEET_ID;
+  if (!sheetId) {
+    throw new Error(
+      "Falta GOOGLE_SHEET_ID — crea el Sheet manualmente, compártelo (Editor) con la cuenta de servicio, y pon su ID en esta variable."
+    );
+  }
+
   const authClient = auth();
   const sheets = google.sheets({ version: "v4", auth: authClient });
+
+  const nombreHoja = await primeraPestana(sheets, sheetId);
 
   await sheets.spreadsheets.values.append({
     spreadsheetId: sheetId,

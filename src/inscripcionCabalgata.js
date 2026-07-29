@@ -1,7 +1,7 @@
 // Inscripción de un binomio (jinete + equino) para la cabalgata, recolectada por
 // el flujo de WhatsApp en Lucid. Guarda en Firestore (fuente de verdad) y en el
 // mismo momento agrega una fila al Google Sheet (para que el organizador la vea
-// sin entrar a Firebase).
+// sin entrar a Firebase). Columnas y orden acordados con el Sheet real del usuario.
 const { collection, addDoc } = require("firebase/firestore");
 const { db } = require("./firebaseClient");
 const { agregarFila } = require("./sheets");
@@ -10,18 +10,20 @@ const TITULO_SHEET = "Inscripciones Cabalgata - Expo Equinox 2026";
 const NOMBRE_HOJA = "Inscripciones";
 
 const ENCABEZADOS = [
-  "Fecha",
-  "Nombre completo",
-  "Cédula",
-  "Teléfono",
-  "Contacto",
-  "Es mayor de edad",
-  "Acepta decreto 106",
-  "Acepta artículo séptimo",
-  "Nombre del ejemplar",
-  "Edad del equino",
-  "Tiene microchip",
-  "Número de microchip",
+  "Fecha inscripcion",
+  "nombre",
+  "cedula",
+  "telefono",
+  "contacto",
+  "municipio",
+  "es mayor de edad",
+  "acepta articulo sexto",
+  "acepta articulo septimo",
+  "nombre ejemplar",
+  "edad equino",
+  "tiene microchip",
+  "numero microchip",
+  "soporte pago",
 ];
 
 async function registrarInscripcionCabalgata(datos = {}) {
@@ -30,13 +32,15 @@ async function registrarInscripcionCabalgata(datos = {}) {
     cedula = "",
     telefono = "",
     contacto = "",
+    municipio = "",
     esMayorDeEdad = "",
-    aceptaDecreto106 = "",
+    aceptaArticuloSexto = "",
     aceptaArticuloSeptimo = "",
     nombreEjemplar = "",
     edadEquino = "",
     tieneMicrochip = "",
     numeroMicrochip = "",
+    soportePago = "",
   } = datos;
 
   if (!nombreCompleto || !nombreEjemplar) {
@@ -52,13 +56,15 @@ async function registrarInscripcionCabalgata(datos = {}) {
     cedula,
     telefono,
     contacto,
+    municipio,
     esMayorDeEdad,
-    aceptaDecreto106,
+    aceptaArticuloSexto,
     aceptaArticuloSeptimo,
     nombreEjemplar,
     edadEquino,
     tieneMicrochip,
     numeroMicrochip,
+    soportePago,
     fecha,
   });
 
@@ -73,13 +79,15 @@ async function registrarInscripcionCabalgata(datos = {}) {
       cedula,
       telefono,
       contacto,
+      municipio,
       esMayorDeEdad,
-      aceptaDecreto106,
+      aceptaArticuloSexto,
       aceptaArticuloSeptimo,
       nombreEjemplar,
       edadEquino,
       tieneMicrochip,
       numeroMicrochip,
+      soportePago,
     ]);
   } catch (err) {
     console.error(`No se pudo espejar a Google Sheets la inscripción ${docRef.id} (sí quedó en Firestore):`, err);
