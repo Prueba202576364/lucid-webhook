@@ -155,4 +155,29 @@ async function escribirEjemplar({ modalidad, sexo, categoria, nombreEjemplar, re
   return { escrito: true, pestana, fila: filaReal, numeroEnBloque: filaLibre - filaInicioBloque + 1 };
 }
 
-module.exports = { obtenerCategoriasReales, escribirEjemplar, MODALIDADES_VALIDAS };
+// Completa el palafrenero en la misma fila donde ya quedó su ejemplar — no
+// busca nada, va directo a la celda porque el llamador ya sabe pestaña+fila
+// (quedaron guardadas en Firestore cuando se escribió el ejemplar).
+async function escribirPalafrenero({ pestana, fila, sexo, nombrePalafrenero, telefonoPalafrenero }) {
+  const sheetId = process.env.FERIA_SHEET_ID;
+  if (!sheetId) throw new Error("Falta FERIA_SHEET_ID en las variables de entorno.");
+
+  const bloque = BLOQUES.find((b) => b.sexo === sexo.toUpperCase());
+  if (!bloque) throw new Error(`Sexo no reconocido: ${sexo}`);
+  const inicioCol = letraAColumna(bloque.inicio);
+  const colPalafrenero = columnaALetra(inicioCol + 8);
+  const colTelefono = columnaALetra(inicioCol + 9);
+
+  const authClient = auth();
+  const sheets = google.sheets({ version: "v4", auth: authClient });
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: sheetId,
+    range: `'${pestana}'!${colPalafrenero}${fila}:${colTelefono}${fila}`,
+    valueInputOption: "RAW",
+    requestBody: { values: [[nombrePalafrenero, telefonoPalafrenero]] },
+  });
+
+  return { escrito: true, pestana, fila };
+}
+
+module.exports = { obtenerCategoriasReales, escribirEjemplar, escribirPalafrenero, MODALIDADES_VALIDAS };

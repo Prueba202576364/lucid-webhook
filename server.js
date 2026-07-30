@@ -10,6 +10,7 @@ const http = require("http");
 const { obtenerDisponibilidad } = require("./src/disponibilidad");
 const { registrarInscripcionCabalgata } = require("./src/inscripcionCabalgata");
 const { registrarEjemplarFeria } = require("./src/inscripcionFeriaEjemplar");
+const { registrarPalafreneroFeria } = require("./src/inscripcionFeriaPalafrenero");
 
 const PORT = process.env.PORT || 3000;
 const TOKEN = process.env.LUCID_WEBHOOK_TOKEN;
@@ -107,6 +108,32 @@ async function manejarInscripcionFeriaEjemplar(req, res) {
   }
 }
 
+async function manejarInscripcionFeriaPalafrenero(req, res) {
+  if (!estaAutorizado(req)) {
+    res.writeHead(401, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, error: "no autorizado" }));
+    return;
+  }
+
+  let datos;
+  try {
+    datos = await leerCuerpoJSON(req);
+  } catch (err) {
+    res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, error: "cuerpo no es JSON válido" }));
+    return;
+  }
+
+  try {
+    const resultado = await registrarPalafreneroFeria(datos);
+    res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, ...resultado }));
+  } catch (err) {
+    console.error("Error registrando palafrenero de feria:", err);
+    const status = err.status || 500;
+    res
+      .writeHead(status, { "Content-Type": "application/json" })
+      .end(JSON.stringify({ ok: false, error: status === 400 ? err.message : "error interno" }));
+  }
+}
+
 const server = http.createServer((req, res) => {
   if (req.method === "GET" && req.url === "/") {
     res.writeHead(200, { "Content-Type": "text/plain" });
@@ -126,6 +153,11 @@ const server = http.createServer((req, res) => {
 
   if (req.method === "POST" && req.url === "/inscripcion-feria-ejemplar") {
     manejarInscripcionFeriaEjemplar(req, res);
+    return;
+  }
+
+  if (req.method === "POST" && req.url === "/inscripcion-feria-palafrenero") {
+    manejarInscripcionFeriaPalafrenero(req, res);
     return;
   }
 

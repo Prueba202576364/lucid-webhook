@@ -92,4 +92,43 @@ async function organizarEjemplarMontador(datosEjemplarTexto, datosMontadorTexto)
   return { ...extraido, categoria };
 }
 
-module.exports = { organizarEjemplarMontador };
+// El palafrenero se recolecta en su propio loop, aparte, así que hay que
+// adivinar a cuál ejemplar se refiere el texto — restringido a los nombres
+// reales de ejemplares que ya se registraron en ese mismo lote, nunca a uno
+// inventado.
+async function organizarPalafrenero(datosPalafreneroTexto, nombresEjemplaresReales) {
+  if (nombresEjemplaresReales.length === 0) {
+    throw new Error("No hay ejemplares registrados en este lote para asociar el palafrenero.");
+  }
+  const esquema = {
+    type: "object",
+    properties: {
+      nombrePalafrenero: { type: "string" },
+      telefonoPalafrenero: { type: "string" },
+      nombreEjemplar: { type: "string", enum: nombresEjemplaresReales, description: "A cuál de los ejemplares ya registrados cuida este palafrenero" },
+    },
+    required: ["nombrePalafrenero", "telefonoPalafrenero", "nombreEjemplar"],
+    additionalProperties: false,
+  };
+  const mensaje = await client.messages.create({
+    model: "claude-opus-5",
+    max_tokens: 512,
+    output_config: { effort: "low", format: { type: "json_schema", schema: esquema } },
+    messages: [
+      {
+        role: "user",
+        content:
+          `Datos de un palafrenero para una exposición equina, en texto libre:\n"""${datosPalafreneroTexto}"""\n\n` +
+          `Extrae su nombre y teléfono. Para "nombreEjemplar", elige de la lista de ejemplares ya registrados el que mejor ` +
+          `corresponda a lo que la persona mencionó (puede venir con errores de tipeo o mayúsculas distintas). Si no menciona ` +
+          `ningún ejemplar y solo hay uno en la lista, asume que es ese.`,
+      },
+    ],
+  });
+  if (mensaje.stop_reason === "refusal") throw new Error("Claude no pudo procesar el texto del palafrenero (refusal).");
+  const bloque = mensaje.content.find((b) => b.type === "text");
+  if (!bloque) throw new Error("Claude no devolvió los datos del palafrenero.");
+  return JSON.parse(bloque.text);
+}
+
+module.exports = { organizarEjemplarMontador, organizarPalafrenero };

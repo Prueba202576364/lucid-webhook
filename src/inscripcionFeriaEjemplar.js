@@ -1,7 +1,7 @@
 // Un ejemplar + su montador, para la inscripción a la Feria. Se llama una vez
 // por cada vuelta del loop en Lucid (no se espera al final) — así, si alguien
 // deja la conversación a la mitad, los ejemplares que ya mandó no se pierden.
-const { collection, addDoc } = require("firebase/firestore");
+const { collection, addDoc, updateDoc } = require("firebase/firestore");
 const { db } = require("./firebaseClient");
 const { organizarEjemplarMontador } = require("./organizarDatosFeria");
 const { escribirEjemplar } = require("./sheetsFeria");
@@ -72,6 +72,11 @@ async function registrarEjemplarFeria(datos = {}) {
     sheet = await escribirEjemplar({ modalidad, sexo: sexoNormalizado, categoria, nombreEjemplar, registro, criaderoDondePasta, nombreMontador });
     if (!sheet.escrito) {
       console.warn(`Ejemplar ${docRef.id} no se pudo escribir en el Sheet (${sheet.motivo}) — sigue guardado en Firestore.`);
+    } else {
+      // Se guarda dónde quedó exactamente (pestaña + fila) para que, cuando
+      // llegue el palafrenero de este ejemplar en su propio loop, se pueda
+      // completar esa misma fila sin tener que volver a buscar el bloque.
+      await updateDoc(docRef, { sheetPestana: sheet.pestana, sheetFila: sheet.fila });
     }
   } catch (err) {
     console.error(`Error escribiendo en el Sheet el ejemplar ${docRef.id} (sí quedó en Firestore):`, err);
