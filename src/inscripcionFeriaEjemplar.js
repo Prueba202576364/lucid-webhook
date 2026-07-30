@@ -11,32 +11,27 @@ function generarLoteId() {
 }
 
 async function registrarEjemplarFeria(datos = {}) {
-  const { loteId, datosEjemplarTexto = "", sexo = "", datosMontadorTexto = "" } = datos;
+  const { loteId, datosEjemplarTexto = "", datosMontadorTexto = "" } = datos;
 
-  if (!datosEjemplarTexto || !sexo || !datosMontadorTexto) {
-    const error = new Error("Faltan campos obligatorios: datosEjemplarTexto, sexo y datosMontadorTexto.");
-    error.status = 400;
-    throw error;
-  }
-  if (!["HEMBRA", "MACHO"].includes(sexo.trim().toUpperCase())) {
-    const error = new Error('sexo debe ser "Hembra" o "Macho".');
+  if (!datosEjemplarTexto || !datosMontadorTexto) {
+    const error = new Error("Faltan campos obligatorios: datosEjemplarTexto y datosMontadorTexto.");
     error.status = 400;
     throw error;
   }
 
-  const sexoNormalizado = sexo.trim().toUpperCase();
   const loteIdFinal = loteId && loteId.trim() ? loteId.trim() : generarLoteId();
 
   const {
     nombreEjemplar,
     registro,
     criaderoDondePasta,
+    sexo: sexoNormalizado,
     modalidad,
     categoria,
     nombreMontador,
     documentoMontador,
     telefonoMontador,
-  } = await organizarEjemplarMontador(datosEjemplarTexto, sexoNormalizado, datosMontadorTexto);
+  } = await organizarEjemplarMontador(datosEjemplarTexto, datosMontadorTexto);
 
   if (!nombreEjemplar || !nombreMontador) {
     const error = new Error("No se pudo identificar el nombre del ejemplar o del montador en el texto recibido.");
