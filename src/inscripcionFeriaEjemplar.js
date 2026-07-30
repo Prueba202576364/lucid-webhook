@@ -10,6 +10,13 @@ function generarLoteId() {
   return "LOTE-" + Math.random().toString(36).slice(2, 7).toUpperCase();
 }
 
+// Si en Lucid el campo personalizado del loteId todavía no existe o no se
+// llenó, la variable "{{...}}" puede llegar sin resolver, tal cual, como
+// texto — hay que tratar eso como si no hubiera llegado nada.
+function loteIdValido(loteId) {
+  return typeof loteId === "string" && loteId.trim() && !loteId.includes("{{");
+}
+
 async function registrarEjemplarFeria(datos = {}) {
   const { loteId, datosEjemplarTexto = "", datosMontadorTexto = "" } = datos;
 
@@ -19,7 +26,7 @@ async function registrarEjemplarFeria(datos = {}) {
     throw error;
   }
 
-  const loteIdFinal = loteId && loteId.trim() ? loteId.trim() : generarLoteId();
+  const loteIdFinal = loteIdValido(loteId) ? loteId.trim() : generarLoteId();
 
   const {
     nombreEjemplar,
