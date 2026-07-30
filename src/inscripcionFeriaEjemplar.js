@@ -1,9 +1,10 @@
-// Un ejemplar + su montador, para la inscripción a la Feria. Se llama una vez
-// por cada vuelta del loop en Lucid (no se espera al final) — así, si alguien
-// deja la conversación a la mitad, los ejemplares que ya mandó no se pierden.
-const { collection, addDoc, updateDoc } = require("firebase/firestore");
+// Un ejemplar + su montador + su palafrenero, para la inscripción a la
+// Feria. Se llama una vez por cada vuelta del loop en Lucid (no se espera al
+// final) — así, si alguien deja la conversación a la mitad, los ejemplares
+// que ya mandó no se pierden.
+const { collection, addDoc } = require("firebase/firestore");
 const { db } = require("./firebaseClient");
-const { organizarEjemplarMontador } = require("./organizarDatosFeria");
+const { organizarEjemplarCompleto } = require("./organizarDatosFeria");
 const { escribirEjemplar } = require("./sheetsFeria");
 
 function generarLoteId() {
@@ -18,10 +19,10 @@ function loteIdValido(loteId) {
 }
 
 async function registrarEjemplarFeria(datos = {}) {
-  const { loteId, datosEjemplarTexto = "", datosMontadorTexto = "" } = datos;
+  const { loteId, datosEjemplarTexto = "", datosMontadorTexto = "", datosPalafreneroTexto = "" } = datos;
 
-  if (!datosEjemplarTexto || !datosMontadorTexto) {
-    const error = new Error("Faltan campos obligatorios: datosEjemplarTexto y datosMontadorTexto.");
+  if (!datosEjemplarTexto || !datosMontadorTexto || !datosPalafreneroTexto) {
+    const error = new Error("Faltan campos obligatorios: datosEjemplarTexto, datosMontadorTexto y datosPalafreneroTexto.");
     error.status = 400;
     throw error;
   }
@@ -38,7 +39,9 @@ async function registrarEjemplarFeria(datos = {}) {
     nombreMontador,
     documentoMontador,
     telefonoMontador,
-  } = await organizarEjemplarMontador(datosEjemplarTexto, datosMontadorTexto);
+    nombrePalafrenero,
+    telefonoPalafrenero,
+  } = await organizarEjemplarCompleto(datosEjemplarTexto, datosMontadorTexto, datosPalafreneroTexto);
 
   if (!nombreEjemplar || !nombreMontador) {
     const error = new Error("No se pudo identificar el nombre del ejemplar o del montador en el texto recibido.");
@@ -59,9 +62,12 @@ async function registrarEjemplarFeria(datos = {}) {
     nombreMontador,
     documentoMontador,
     telefonoMontador,
+    nombrePalafrenero,
+    telefonoPalafrenero,
     fecha,
     datosEjemplarTexto,
     datosMontadorTexto,
+    datosPalafreneroTexto,
   });
 
   // Firestore ya quedó guardado (fuente de verdad). El Sheet es un espejo para
@@ -69,14 +75,19 @@ async function registrarEjemplarFeria(datos = {}) {
   // pierde el registro, solo se marca para que alguien lo revise a mano.
   let sheet = { escrito: false, motivo: "error" };
   try {
-    sheet = await escribirEjemplar({ modalidad, sexo: sexoNormalizado, categoria, nombreEjemplar, registro, criaderoDondePasta, nombreMontador });
+    sheet = await escribirEjemplar({
+      modalidad,
+      sexo: sexoNormalizado,
+      categoria,
+      nombreEjemplar,
+      registro,
+      criaderoDondePasta,
+      nombreMontador,
+      nombrePalafrenero,
+      telefonoPalafrenero,
+    });
     if (!sheet.escrito) {
       console.warn(`Ejemplar ${docRef.id} no se pudo escribir en el Sheet (${sheet.motivo}) — sigue guardado en Firestore.`);
-    } else {
-      // Se guarda dónde quedó exactamente (pestaña + fila) para que, cuando
-      // llegue el palafrenero de este ejemplar en su propio loop, se pueda
-      // completar esa misma fila sin tener que volver a buscar el bloque.
-      await updateDoc(docRef, { sheetPestana: sheet.pestana, sheetFila: sheet.fila });
     }
   } catch (err) {
     console.error(`Error escribiendo en el Sheet el ejemplar ${docRef.id} (sí quedó en Firestore):`, err);

@@ -89,7 +89,7 @@ async function obtenerCategoriasReales(modalidad, sexo) {
 // Busca el bloque exacto (por Sexo + Modalidad + Categoría) y dentro de él la
 // primera fila vacía. Devuelve null si el bloque está lleno (las 11 filas ya
 // tienen ejemplar) o si no encuentra el bloque.
-async function escribirEjemplar({ modalidad, sexo, categoria, nombreEjemplar, registro, criaderoDondePasta, nombreMontador }) {
+async function escribirEjemplar({ modalidad, sexo, categoria, nombreEjemplar, registro, criaderoDondePasta, nombreMontador, nombrePalafrenero, telefonoPalafrenero }) {
   const pestana = MODALIDAD_A_PESTANA[modalidad];
   if (!pestana) throw new Error(`Modalidad no reconocida: ${modalidad}`);
   const sheetId = process.env.FERIA_SHEET_ID;
@@ -136,18 +136,20 @@ async function escribirEjemplar({ modalidad, sexo, categoria, nombreEjemplar, re
   const colRegistro = columnaALetra(inicioCol + 2);
   const colCriadero = columnaALetra(inicioCol + 6);
   const colMontador = columnaALetra(inicioCol + 7);
+  const colPalafrenero = columnaALetra(inicioCol + 8);
+  const colTelefonoPalafrenero = columnaALetra(inicioCol + 9);
 
-  // Dos rangos separados a propósito — B:C y G:H, saltando D:F (Sexo/Andar/
-  // Categoría). Esas tres columnas solo vienen escritas en la PRIMERA fila de
-  // cada bloque (el encabezado del bloque); si el cupo libre resulta ser esa
-  // primera fila, no queremos borrar esas etiquetas escribiendo vacío encima.
+  // Rangos separados a propósito — nunca tocan D:F (Sexo/Andar/Categoría).
+  // Esas tres columnas solo vienen escritas en la PRIMERA fila de cada bloque
+  // (el encabezado del bloque); si el cupo libre resulta ser esa primera
+  // fila, no queremos borrar esas etiquetas escribiendo vacío encima.
   await sheets.spreadsheets.values.batchUpdate({
     spreadsheetId: sheetId,
     requestBody: {
       valueInputOption: "RAW",
       data: [
         { range: `'${pestana}'!${colNombre}${filaReal}:${colRegistro}${filaReal}`, values: [[nombreEjemplar, registro]] },
-        { range: `'${pestana}'!${colCriadero}${filaReal}:${colMontador}${filaReal}`, values: [[criaderoDondePasta, nombreMontador]] },
+        { range: `'${pestana}'!${colCriadero}${filaReal}:${colTelefonoPalafrenero}${filaReal}`, values: [[criaderoDondePasta, nombreMontador, nombrePalafrenero, telefonoPalafrenero]] },
       ],
     },
   });
@@ -155,29 +157,4 @@ async function escribirEjemplar({ modalidad, sexo, categoria, nombreEjemplar, re
   return { escrito: true, pestana, fila: filaReal, numeroEnBloque: filaLibre - filaInicioBloque + 1 };
 }
 
-// Completa el palafrenero en la misma fila donde ya quedó su ejemplar — no
-// busca nada, va directo a la celda porque el llamador ya sabe pestaña+fila
-// (quedaron guardadas en Firestore cuando se escribió el ejemplar).
-async function escribirPalafrenero({ pestana, fila, sexo, nombrePalafrenero, telefonoPalafrenero }) {
-  const sheetId = process.env.FERIA_SHEET_ID;
-  if (!sheetId) throw new Error("Falta FERIA_SHEET_ID en las variables de entorno.");
-
-  const bloque = BLOQUES.find((b) => b.sexo === sexo.toUpperCase());
-  if (!bloque) throw new Error(`Sexo no reconocido: ${sexo}`);
-  const inicioCol = letraAColumna(bloque.inicio);
-  const colPalafrenero = columnaALetra(inicioCol + 8);
-  const colTelefono = columnaALetra(inicioCol + 9);
-
-  const authClient = auth();
-  const sheets = google.sheets({ version: "v4", auth: authClient });
-  await sheets.spreadsheets.values.update({
-    spreadsheetId: sheetId,
-    range: `'${pestana}'!${colPalafrenero}${fila}:${colTelefono}${fila}`,
-    valueInputOption: "RAW",
-    requestBody: { values: [[nombrePalafrenero, telefonoPalafrenero]] },
-  });
-
-  return { escrito: true, pestana, fila };
-}
-
-module.exports = { obtenerCategoriasReales, escribirEjemplar, escribirPalafrenero, MODALIDADES_VALIDAS };
+module.exports = { obtenerCategoriasReales, escribirEjemplar, MODALIDADES_VALIDAS };
