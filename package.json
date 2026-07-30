@@ -12,6 +12,7 @@
     "node": "20"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.68.0",
     "firebase": "^12.16.0",
     "googleapis": "^144.0.0"
   }

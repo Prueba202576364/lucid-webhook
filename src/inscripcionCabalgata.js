@@ -1,10 +1,13 @@
 // Inscripción de un binomio (jinete + equino) para la cabalgata, recolectada por
-// el flujo de WhatsApp en Lucid. Guarda en Firestore (fuente de verdad) y en el
-// mismo momento agrega una fila al Google Sheet (para que el organizador la vea
-// sin entrar a Firebase). Columnas y orden acordados con el Sheet real del usuario.
+// el flujo de WhatsApp en Lucid. El jinete y el equino ahora se recolectan en
+// dos mensajes de texto libre (una pregunta por grupo, no una por dato) — Claude
+// organiza ese texto en los campos separados antes de guardar. Guarda en
+// Firestore (fuente de verdad) y en el mismo momento agrega una fila al Google
+// Sheet (para que el organizador la vea sin entrar a Firebase).
 const { collection, addDoc } = require("firebase/firestore");
 const { db } = require("./firebaseClient");
 const { agregarFila } = require("./sheets");
+const { organizarDatosJineteEquino } = require("./organizarDatos");
 
 const TITULO_SHEET = "Inscripciones Cabalgata - Expo Equinox 2026";
 const NOMBRE_HOJA = "Inscripciones";
@@ -28,23 +31,34 @@ const ENCABEZADOS = [
 
 async function registrarInscripcionCabalgata(datos = {}) {
   const {
-    nombreCompleto = "",
-    cedula = "",
-    telefono = "",
-    contacto = "",
-    municipio = "",
+    datosJineteTexto = "",
+    datosEquinoTexto = "",
     esMayorDeEdad = "",
     aceptaArticuloSexto = "",
     aceptaArticuloSeptimo = "",
-    nombreEjemplar = "",
-    edadEquino = "",
-    tieneMicrochip = "",
-    numeroMicrochip = "",
     soportePago = "",
   } = datos;
 
+  if (!datosJineteTexto || !datosEquinoTexto) {
+    const error = new Error("Faltan campos obligatorios: datosJineteTexto y datosEquinoTexto.");
+    error.status = 400;
+    throw error;
+  }
+
+  const {
+    nombreCompleto,
+    cedula,
+    telefono,
+    contacto,
+    municipio,
+    nombreEjemplar,
+    edadEquino,
+    tieneMicrochip,
+    numeroMicrochip,
+  } = await organizarDatosJineteEquino(datosJineteTexto, datosEquinoTexto);
+
   if (!nombreCompleto || !nombreEjemplar) {
-    const error = new Error("Faltan campos obligatorios: nombreCompleto y nombreEjemplar.");
+    const error = new Error("No se pudo identificar el nombre del jinete o del ejemplar en el texto recibido.");
     error.status = 400;
     throw error;
   }
@@ -66,6 +80,9 @@ async function registrarInscripcionCabalgata(datos = {}) {
     numeroMicrochip,
     soportePago,
     fecha,
+    // Texto original, por si la extracción se equivocó en algo y hay que revisar a mano.
+    datosJineteTexto,
+    datosEquinoTexto,
   });
 
   // Firestore ya quedó guardado (es la fuente de verdad) — si el espejo a
