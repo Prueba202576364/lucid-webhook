@@ -18,6 +18,43 @@ function loteIdValido(loteId) {
   return typeof loteId === "string" && loteId.trim() && !loteId.includes("{{");
 }
 
+const VACIO = (v) => !v || !v.toString().trim();
+
+// Revisa cada uno de los 3 bloques por separado, para poder decirle a Lucid
+// exactamente cuál volver a pedir (no los tres) en vez de solo "algo falló".
+function validarBloques(extraido) {
+  const faltantesEjemplar = [];
+  if (VACIO(extraido.nombreEjemplar)) faltantesEjemplar.push("nombre del ejemplar");
+  if (VACIO(extraido.registro)) faltantesEjemplar.push("número de registro");
+  if (VACIO(extraido.criaderoDondePasta)) faltantesEjemplar.push("criadero donde pasta");
+
+  const faltantesMontador = [];
+  if (VACIO(extraido.nombreMontador)) faltantesMontador.push("nombre del montador");
+  if (VACIO(extraido.documentoMontador)) faltantesMontador.push("documento del montador");
+  if (VACIO(extraido.telefonoMontador)) faltantesMontador.push("teléfono del montador");
+
+  const faltantesPalafrenero = [];
+  if (VACIO(extraido.nombrePalafrenero)) faltantesPalafrenero.push("nombre del palafrenero");
+  if (VACIO(extraido.telefonoPalafrenero)) faltantesPalafrenero.push("teléfono del palafrenero");
+
+  const errorEjemplar = faltantesEjemplar.length > 0;
+  const errorMontador = faltantesMontador.length > 0;
+  const errorPalafrenero = faltantesPalafrenero.length > 0;
+
+  const partes = [];
+  if (errorEjemplar) partes.push(`Del ejemplar faltó: ${faltantesEjemplar.join(", ")}.`);
+  if (errorMontador) partes.push(`Del montador faltó: ${faltantesMontador.join(", ")}.`);
+  if (errorPalafrenero) partes.push(`Del palafrenero faltó: ${faltantesPalafrenero.join(", ")}.`);
+
+  return {
+    valido: !errorEjemplar && !errorMontador && !errorPalafrenero,
+    errorEjemplar,
+    errorMontador,
+    errorPalafrenero,
+    mensajeError: partes.join(" "),
+  };
+}
+
 async function registrarEjemplarFeria(datos = {}) {
   const { loteId, datosEjemplarTexto = "", datosMontadorTexto = "", datosPalafreneroTexto = "" } = datos;
 
@@ -43,10 +80,23 @@ async function registrarEjemplarFeria(datos = {}) {
     telefonoPalafrenero,
   } = await organizarEjemplarCompleto(datosEjemplarTexto, datosMontadorTexto, datosPalafreneroTexto);
 
-  if (!nombreEjemplar || !nombreMontador) {
-    const error = new Error("No se pudo identificar el nombre del ejemplar o del montador en el texto recibido.");
-    error.status = 400;
-    throw error;
+  const validacion = validarBloques({
+    nombreEjemplar, registro, criaderoDondePasta,
+    nombreMontador, documentoMontador, telefonoMontador,
+    nombrePalafrenero, telefonoPalafrenero,
+  });
+
+  // No se guarda nada todavía si falta algo — así Lucid puede volver a pedir
+  // solo el bloque incompleto y reintentar, sin dejar un registro a medias.
+  if (!validacion.valido) {
+    return {
+      ok: false,
+      loteId: loteIdFinal,
+      errorEjemplar: validacion.errorEjemplar,
+      errorMontador: validacion.errorMontador,
+      errorPalafrenero: validacion.errorPalafrenero,
+      mensajeError: validacion.mensajeError,
+    };
   }
 
   const fecha = new Date().toISOString();
@@ -94,10 +144,15 @@ async function registrarEjemplarFeria(datos = {}) {
   }
 
   return {
+    ok: true,
     id: docRef.id,
     loteId: loteIdFinal,
     cupoLleno: sheet.motivo === "cupo_lleno",
     escritoEnSheet: sheet.escrito === true,
+    errorEjemplar: false,
+    errorMontador: false,
+    errorPalafrenero: false,
+    mensajeError: "",
   };
 }
 
