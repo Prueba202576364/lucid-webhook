@@ -8,6 +8,10 @@ const { generarLoteId, loteIdValido } = require("./loteId");
 
 const VACIO = (v) => !v || !v.toString().trim();
 
+// Texto "true"/"false" en vez de booleano JSON — evita que Lucid infiera el
+// campo como tipo Booleano y rompa las condiciones "Contiene true".
+const B = (v) => (v ? "true" : "false");
+
 async function registrarPropietarioFeria(datos = {}) {
   const { loteId, datosPropietarioTexto = "" } = datos;
 
@@ -36,7 +40,7 @@ async function registrarPropietarioFeria(datos = {}) {
   // igual que con ejemplar/montador/palafrenero.
   if (faltantes.length > 0) {
     return {
-      ok: false,
+      ok: B(false),
       mensajeError: `Del propietario faltó: ${faltantes.join(", ")}.`,
     };
   }
@@ -55,7 +59,7 @@ async function registrarPropietarioFeria(datos = {}) {
     datosPropietarioTexto,
   });
 
-  return { ok: true, id: docRef.id, loteId: loteIdFinal, mensajeError: "" };
+  return { ok: B(true), id: docRef.id, loteId: loteIdFinal, mensajeError: "" };
 }
 
 module.exports = { registrarPropietarioFeria };

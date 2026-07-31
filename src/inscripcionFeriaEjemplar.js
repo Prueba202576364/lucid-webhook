@@ -10,6 +10,12 @@ const { generarLoteId, loteIdValido } = require("./loteId");
 
 const VACIO = (v) => !v || !v.toString().trim();
 
+// Se manda como texto "true"/"false" en vez de booleano JSON — un booleano
+// JSON hace que Lucid infiera el campo personalizado como tipo Booleano al
+// mapear la respuesta, y las condiciones tipo "Contiene true" (pensadas para
+// texto) dejan de reconocerlo aunque el valor se vea correcto en el log.
+const B = (v) => (v ? "true" : "false");
+
 // Revisa cada uno de los 3 bloques por separado, para poder decirle a Lucid
 // exactamente cuál volver a pedir (no los tres) en vez de solo "algo falló".
 function validarBloques(extraido) {
@@ -80,11 +86,11 @@ async function registrarEjemplarFeria(datos = {}) {
   // solo el bloque incompleto y reintentar, sin dejar un registro a medias.
   if (!validacion.valido) {
     return {
-      ok: false,
+      ok: B(false),
       loteId: loteIdFinal,
-      errorEjemplar: validacion.errorEjemplar,
-      errorMontador: validacion.errorMontador,
-      errorPalafrenero: validacion.errorPalafrenero,
+      errorEjemplar: B(validacion.errorEjemplar),
+      errorMontador: B(validacion.errorMontador),
+      errorPalafrenero: B(validacion.errorPalafrenero),
       mensajeError: validacion.mensajeError,
     };
   }
@@ -134,14 +140,14 @@ async function registrarEjemplarFeria(datos = {}) {
   }
 
   return {
-    ok: true,
+    ok: B(true),
     id: docRef.id,
     loteId: loteIdFinal,
-    cupoLleno: sheet.motivo === "cupo_lleno",
-    escritoEnSheet: sheet.escrito === true,
-    errorEjemplar: false,
-    errorMontador: false,
-    errorPalafrenero: false,
+    cupoLleno: B(sheet.motivo === "cupo_lleno"),
+    escritoEnSheet: B(sheet.escrito === true),
+    errorEjemplar: B(false),
+    errorMontador: B(false),
+    errorPalafrenero: B(false),
     mensajeError: "",
   };
 }
