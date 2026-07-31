@@ -6,17 +6,7 @@ const { collection, addDoc } = require("firebase/firestore");
 const { db } = require("./firebaseClient");
 const { organizarEjemplarCompleto } = require("./organizarDatosFeria");
 const { escribirEjemplar } = require("./sheetsFeria");
-
-function generarLoteId() {
-  return "LOTE-" + Math.random().toString(36).slice(2, 7).toUpperCase();
-}
-
-// Si en Lucid el campo personalizado del loteId todavía no existe o no se
-// llenó, la variable "{{...}}" puede llegar sin resolver, tal cual, como
-// texto — hay que tratar eso como si no hubiera llegado nada.
-function loteIdValido(loteId) {
-  return typeof loteId === "string" && loteId.trim() && !loteId.includes("{{");
-}
+const { generarLoteId, loteIdValido } = require("./loteId");
 
 const VACIO = (v) => !v || !v.toString().trim();
 

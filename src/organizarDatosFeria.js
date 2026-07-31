@@ -98,4 +98,38 @@ async function organizarEjemplarCompleto(datosEjemplarTexto, datosMontadorTexto,
   return { ...extraido, categoria };
 }
 
-module.exports = { organizarEjemplarCompleto };
+const ESQUEMA_PROPIETARIO = {
+  type: "object",
+  properties: {
+    nombrePropietario: { type: "string", description: "Nombre completo o razón social" },
+    documentoPropietario: { type: "string", description: "Tipo y número de documento" },
+    telefonoPropietario: { type: "string" },
+    correoPropietario: { type: "string" },
+    municipioPropietario: { type: "string" },
+  },
+  required: ["nombrePropietario", "documentoPropietario", "telefonoPropietario", "correoPropietario", "municipioPropietario"],
+  additionalProperties: false,
+};
+
+async function organizarPropietario(datosPropietarioTexto) {
+  const mensaje = await client.messages.create({
+    model: "claude-opus-5",
+    max_tokens: 512,
+    output_config: { effort: "low", format: { type: "json_schema", schema: ESQUEMA_PROPIETARIO } },
+    messages: [
+      {
+        role: "user",
+        content:
+          `Datos de el propietario/criadero de un ejemplar para una exposición equina, en texto libre:\n"""${datosPropietarioTexto}"""\n\n` +
+          `Extrae cada dato: nombre completo o razón social, tipo y número de documento, teléfono, correo electrónico y municipio. ` +
+          `Si algún dato no aparece, deja el campo como cadena vacía — no inventes nada.`,
+      },
+    ],
+  });
+  if (mensaje.stop_reason === "refusal") throw new Error("Claude no pudo procesar el texto del propietario (refusal).");
+  const bloque = mensaje.content.find((b) => b.type === "text");
+  if (!bloque) throw new Error("Claude no devolvió los datos del propietario.");
+  return JSON.parse(bloque.text);
+}
+
+module.exports = { organizarEjemplarCompleto, organizarPropietario };
