@@ -16,6 +16,15 @@ const { generarLoteId, loteIdValido } = require("./loteId");
 const { obtenerSeccion, guardarSeccion, limpiarSeccion, resolverBloque } = require("./borradores");
 const { validarNombre, validarDocumento, validarTelefono, validarMunicipio, validarTextoLibre, validarEdad } = require("./validaciones");
 
+// "contacto" casi siempre es el mismo número que "teléfono" — no tiene
+// sentido pedirlo dos veces. Si la persona no lo dio como algo distinto, se
+// usa el mismo teléfono en vez de marcarlo como un dato faltante.
+function resolverContacto(nuevo, anterior, telefonoResuelto) {
+  const candidato = (nuevo && nuevo.contacto) || (anterior && anterior.contacto) || "";
+  const r = validarTelefono(candidato);
+  return r.valido ? r.valor : telefonoResuelto;
+}
+
 const COLECCION_BORRADORES = "cabalgataBorradores";
 const B = (v) => (v ? "true" : "false");
 
@@ -43,7 +52,6 @@ const SPEC_JINETE = [
   { campo: "nombreCompleto", validador: validarNombre, etiqueta: "nombre completo" },
   { campo: "cedula", validador: validarDocumento, etiqueta: "cédula" },
   { campo: "telefono", validador: validarTelefono, etiqueta: "teléfono" },
-  { campo: "contacto", validador: validarTelefono, etiqueta: "contacto" },
   { campo: "municipio", validador: validarMunicipio, etiqueta: "municipio" },
 ];
 const SPEC_EQUINO = [
@@ -80,6 +88,7 @@ async function registrarInscripcionCabalgata(datos = {}) {
   // tal cual venga (puede ser "No" y quedar sin número, es normal).
   const tieneMicrochip = nuevo.tieneMicrochip || (anterior && anterior.tieneMicrochip) || "";
   const numeroMicrochip = nuevo.numeroMicrochip || (anterior && anterior.numeroMicrochip) || "";
+  const contactoCrudo = nuevo.contacto || (anterior && anterior.contacto) || "";
 
   if (!resJinete.valido || !resEquino.valido) {
     await guardarSeccion(COLECCION_BORRADORES, loteIdFinal, "binomioActual", {
@@ -87,6 +96,7 @@ async function registrarInscripcionCabalgata(datos = {}) {
       ...resEquino.paraGuardar,
       tieneMicrochip,
       numeroMicrochip,
+      contacto: contactoCrudo,
     });
     return {
       ok: B(false),
@@ -98,7 +108,8 @@ async function registrarInscripcionCabalgata(datos = {}) {
     };
   }
 
-  const { nombreCompleto, cedula, telefono, contacto, municipio } = resJinete.valores;
+  const { nombreCompleto, cedula, telefono, municipio } = resJinete.valores;
+  const contacto = resolverContacto(nuevo, anterior, telefono);
   const { nombreEjemplar, edadEquino } = resEquino.valores;
   const fecha = new Date().toISOString();
 
