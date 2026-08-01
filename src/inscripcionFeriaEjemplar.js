@@ -12,9 +12,10 @@ const { db } = require("./firebaseClient");
 const { extraerEjemplarMontador, obtenerCategoriasReales, elegirCategoriaReal } = require("./organizarDatosFeria");
 const { escribirEjemplar, escribirEjemplarGeneral } = require("./sheetsFeria");
 const { generarLoteId, loteIdValido } = require("./loteId");
-const { obtenerSeccion, guardarSeccion, limpiarSeccion, resolverBloque } = require("./borradoresFeria");
-const { validarNombre, validarDocumento, validarTelefono, validarTextoLibre, validarRegistro } = require("./validacionesFeria");
+const { obtenerSeccion, guardarSeccion, limpiarSeccion, resolverBloque } = require("./borradores");
+const { validarNombre, validarDocumento, validarTelefono, validarTextoLibre, validarRegistro } = require("./validaciones");
 
+const COLECCION_BORRADORES = "feriaBorradores";
 const B = (v) => (v ? "true" : "false");
 
 const SPEC_EJEMPLAR = [
@@ -43,7 +44,7 @@ async function registrarEjemplarFeria(datos = {}) {
 
   const loteIdFinal = loteIdValido(loteId) ? loteId.trim() : generarLoteId();
 
-  const anterior = await obtenerSeccion(loteIdFinal, "ejemplarActual");
+  const anterior = await obtenerSeccion(COLECCION_BORRADORES, loteIdFinal, "ejemplarActual");
   const nuevo = await extraerEjemplarMontador(datosEjemplarTexto, datosMontadorTexto, datosPalafreneroTexto, anterior);
 
   // Sexo/Modalidad/Categoría son de lista cerrada — Claude está OBLIGADO a
@@ -59,7 +60,7 @@ async function registrarEjemplarFeria(datos = {}) {
   const resPalafrenero = resolverBloque(SPEC_PALAFRENERO, nuevo, anterior);
 
   if (!resEjemplar.valido || !resMontador.valido || !resPalafrenero.valido) {
-    await guardarSeccion(loteIdFinal, "ejemplarActual", {
+    await guardarSeccion(COLECCION_BORRADORES, loteIdFinal, "ejemplarActual", {
       ...resEjemplar.paraGuardar,
       ...resMontador.paraGuardar,
       ...resPalafrenero.paraGuardar,
@@ -109,7 +110,7 @@ async function registrarEjemplarFeria(datos = {}) {
     datosPalafreneroTexto,
   });
 
-  await limpiarSeccion(loteIdFinal, "ejemplarActual");
+  await limpiarSeccion(COLECCION_BORRADORES, loteIdFinal, "ejemplarActual");
 
   // Firestore ya quedó guardado (fuente de verdad). El Sheet es un espejo para
   // el organizador — si falla o si el cupo de ese bloque ya está lleno, no se

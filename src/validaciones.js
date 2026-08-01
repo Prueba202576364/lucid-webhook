@@ -1,4 +1,4 @@
-// Validaciones de formato para los datos de la Feria. A propósito NO son
+// Validaciones de formato compartidas entre Feria y Cabalgata. A propósito NO son
 // estrictas al extremo: la idea es atrapar errores obvios (un teléfono con
 // letras, un correo sin @, un nombre que en realidad es un número) sin
 // rechazar casos reales que no calcen perfecto con un patrón rígido.
@@ -88,6 +88,15 @@ function validarTextoLibre(v) {
   return { valido: true, valor: val };
 }
 
+// Edad del equino: solo se exige que incluya un número (acepta "8 años",
+// "39 meses", etc.) — no se convierte ni se le pide una unidad fija.
+function validarEdad(v) {
+  const val = limpiar(v);
+  if (!val) return { valido: false, motivo: "no puede estar vacío" };
+  if (!/[0-9]/.test(val)) return { valido: false, motivo: "debe incluir un número" };
+  return { valido: true, valor: val };
+}
+
 module.exports = {
   validarNombre,
   validarDocumento,
@@ -96,4 +105,5 @@ module.exports = {
   validarMunicipio,
   validarRegistro,
   validarTextoLibre,
+  validarEdad,
 };

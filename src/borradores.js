@@ -1,28 +1,28 @@
 // Recuerda, entre intentos fallidos, lo que ya se logró capturar bien de un
-// bloque (propietario o el ejemplar que esté en curso) — así, cuando la
-// persona reenvía solo el dato que faltó, se combina con lo anterior en vez
-// de partir de cero. Un documento por loteId, con dos secciones: la del
-// propietario (una sola vez) y la del ejemplar actual (se reinicia cada vez
-// que uno se guarda con éxito, para no arrastrar datos al siguiente).
+// bloque de datos — así, cuando la persona reenvía solo el dato que faltó,
+// se combina con lo anterior en vez de partir de cero. Un documento por
+// llave (loteId u otro identificador de intento), con una sección por cada
+// bloque que se esté llenando; cada llamador usa su propia colección de
+// Firestore para no mezclar borradores de flujos distintos.
 const { doc, getDoc, setDoc, deleteField } = require("firebase/firestore");
 const { db } = require("./firebaseClient");
 
-function refBorrador(loteId) {
-  return doc(db, "feriaBorradores", loteId);
+function refBorrador(coleccion, llave) {
+  return doc(db, coleccion, llave);
 }
 
-async function obtenerSeccion(loteId, seccion) {
-  const snap = await getDoc(refBorrador(loteId));
+async function obtenerSeccion(coleccion, llave, seccion) {
+  const snap = await getDoc(refBorrador(coleccion, llave));
   if (!snap.exists()) return null;
   return snap.data()[seccion] || null;
 }
 
-async function guardarSeccion(loteId, seccion, datos) {
-  await setDoc(refBorrador(loteId), { [seccion]: datos }, { merge: true });
+async function guardarSeccion(coleccion, llave, seccion, datos) {
+  await setDoc(refBorrador(coleccion, llave), { [seccion]: datos }, { merge: true });
 }
 
-async function limpiarSeccion(loteId, seccion) {
-  await setDoc(refBorrador(loteId), { [seccion]: deleteField() }, { merge: true });
+async function limpiarSeccion(coleccion, llave, seccion) {
+  await setDoc(refBorrador(coleccion, llave), { [seccion]: deleteField() }, { merge: true });
 }
 
 // Resuelve un bloque de campos combinando el intento nuevo con lo que ya se

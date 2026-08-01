@@ -11,9 +11,10 @@ const { db } = require("./firebaseClient");
 const { organizarPropietario } = require("./organizarDatosFeria");
 const { generarLoteId, loteIdValido } = require("./loteId");
 const { escribirPropietarioGeneral } = require("./sheetsFeria");
-const { obtenerSeccion, guardarSeccion, limpiarSeccion, resolverBloque } = require("./borradoresFeria");
-const { validarNombre, validarDocumento, validarTelefono, validarCorreo, validarMunicipio } = require("./validacionesFeria");
+const { obtenerSeccion, guardarSeccion, limpiarSeccion, resolverBloque } = require("./borradores");
+const { validarNombre, validarDocumento, validarTelefono, validarCorreo, validarMunicipio } = require("./validaciones");
 
+const COLECCION_BORRADORES = "feriaBorradores";
 const B = (v) => (v ? "true" : "false");
 
 const SPEC_PROPIETARIO = [
@@ -35,12 +36,12 @@ async function registrarPropietarioFeria(datos = {}) {
 
   const loteIdFinal = loteIdValido(loteId) ? loteId.trim() : generarLoteId();
 
-  const anterior = await obtenerSeccion(loteIdFinal, "propietario");
+  const anterior = await obtenerSeccion(COLECCION_BORRADORES, loteIdFinal, "propietario");
   const nuevo = await organizarPropietario(datosPropietarioTexto, anterior);
   const { valido, valores, paraGuardar, problemas } = resolverBloque(SPEC_PROPIETARIO, nuevo, anterior);
 
   if (!valido) {
-    await guardarSeccion(loteIdFinal, "propietario", paraGuardar);
+    await guardarSeccion(COLECCION_BORRADORES, loteIdFinal, "propietario", paraGuardar);
     return {
       ok: B(false),
       loteId: loteIdFinal,
@@ -62,7 +63,7 @@ async function registrarPropietarioFeria(datos = {}) {
     datosPropietarioTexto,
   });
 
-  await limpiarSeccion(loteIdFinal, "propietario");
+  await limpiarSeccion(COLECCION_BORRADORES, loteIdFinal, "propietario");
 
   // Best-effort: si falla, el propietario sigue guardado en Firestore, solo
   // no queda espejado en "Información general" (se puede completar a mano).

@@ -31,8 +31,18 @@ const ESQUEMA = {
   additionalProperties: false,
 };
 
-async function organizarDatosJineteEquino(datosJineteTexto, datosEquinoTexto) {
+async function organizarDatosJineteEquino(datosJineteTexto, datosEquinoTexto, yaConfirmado) {
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+  // Cuando ya hay datos confirmados de un intento anterior (un reintento
+  // corto que solo trae el dato que faltaba), se le dice a Claude cuáles ya
+  // quedaron resueltos y cuáles siguen pendientes — si no, un texto corto
+  // puede asignarse al campo equivocado y pisar por error un dato que ya
+  // estaba bien.
+  const contexto = yaConfirmado && Object.values(yaConfirmado).some((v) => v)
+    ? `\nOJO: esta persona ya había dado antes estos datos, que quedaron CONFIRMADOS y no debes cambiar ni reinventar — solo repítelos tal cual si el texto nuevo no dice lo contrario:\n${JSON.stringify(yaConfirmado)}\n` +
+      `El texto nuevo probablemente solo trae el dato (o los datos) que todavía faltaban — asígnalo al campo vacío que mejor le corresponda, no lo pongas en un campo que ya estaba confirmado.\n`
+    : "";
 
   const mensaje = await client.messages.create({
     model: "claude-opus-5",
@@ -49,6 +59,7 @@ async function organizarDatosJineteEquino(datosJineteTexto, datosEquinoTexto) {
           `en el orden y formato que haya usado):\n"""${datosJineteTexto}"""\n\n` +
           `Y esto sobre su caballo (nombre del ejemplar, edad, si tiene microchip y su número):\n` +
           `"""${datosEquinoTexto}"""\n\n` +
+          contexto +
           `Extrae cada dato al campo correspondiente. Si un dato no aparece en el texto, deja ese campo ` +
           `como cadena vacía — no inventes ni completes nada que no esté escrito.`,
       },
