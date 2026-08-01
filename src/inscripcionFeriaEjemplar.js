@@ -2,54 +2,35 @@
 // Feria. Se llama una vez por cada vuelta del loop en Lucid (no se espera al
 // final) — así, si alguien deja la conversación a la mitad, los ejemplares
 // que ya mandó no se pierden.
+//
+// Cada uno de los 3 bloques (ejemplar, montador, palafrenero) se valida y se
+// combina por separado con lo que ya se tenía guardado en el borrador — así,
+// si a alguno le falta un dato, se le pide solo ese, y lo que ya estaba bien
+// en los otros dos (o en el mismo bloque) no se pierde.
 const { collection, addDoc, query, where, getDocs } = require("firebase/firestore");
 const { db } = require("./firebaseClient");
-const { organizarEjemplarCompleto } = require("./organizarDatosFeria");
+const { extraerEjemplarMontador, obtenerCategoriasReales, elegirCategoriaReal } = require("./organizarDatosFeria");
 const { escribirEjemplar, escribirEjemplarGeneral } = require("./sheetsFeria");
 const { generarLoteId, loteIdValido } = require("./loteId");
+const { obtenerSeccion, guardarSeccion, limpiarSeccion, resolverBloque } = require("./borradoresFeria");
+const { validarNombre, validarDocumento, validarTelefono, validarTextoLibre, validarRegistro } = require("./validacionesFeria");
 
-const VACIO = (v) => !v || !v.toString().trim();
-
-// Se manda como texto "true"/"false" en vez de booleano JSON — un booleano
-// JSON hace que Lucid infiera el campo personalizado como tipo Booleano al
-// mapear la respuesta, y las condiciones tipo "Contiene true" (pensadas para
-// texto) dejan de reconocerlo aunque el valor se vea correcto en el log.
 const B = (v) => (v ? "true" : "false");
 
-// Revisa cada uno de los 3 bloques por separado, para poder decirle a Lucid
-// exactamente cuál volver a pedir (no los tres) en vez de solo "algo falló".
-function validarBloques(extraido) {
-  const faltantesEjemplar = [];
-  if (VACIO(extraido.nombreEjemplar)) faltantesEjemplar.push("nombre del ejemplar");
-  if (VACIO(extraido.registro)) faltantesEjemplar.push("número de registro");
-  if (VACIO(extraido.criaderoDondePasta)) faltantesEjemplar.push("criadero donde pasta");
-
-  const faltantesMontador = [];
-  if (VACIO(extraido.nombreMontador)) faltantesMontador.push("nombre del montador");
-  if (VACIO(extraido.documentoMontador)) faltantesMontador.push("documento del montador");
-  if (VACIO(extraido.telefonoMontador)) faltantesMontador.push("teléfono del montador");
-
-  const faltantesPalafrenero = [];
-  if (VACIO(extraido.nombrePalafrenero)) faltantesPalafrenero.push("nombre del palafrenero");
-  if (VACIO(extraido.telefonoPalafrenero)) faltantesPalafrenero.push("teléfono del palafrenero");
-
-  const errorEjemplar = faltantesEjemplar.length > 0;
-  const errorMontador = faltantesMontador.length > 0;
-  const errorPalafrenero = faltantesPalafrenero.length > 0;
-
-  const partes = [];
-  if (errorEjemplar) partes.push(`Del ejemplar faltó: ${faltantesEjemplar.join(", ")}.`);
-  if (errorMontador) partes.push(`Del montador faltó: ${faltantesMontador.join(", ")}.`);
-  if (errorPalafrenero) partes.push(`Del palafrenero faltó: ${faltantesPalafrenero.join(", ")}.`);
-
-  return {
-    valido: !errorEjemplar && !errorMontador && !errorPalafrenero,
-    errorEjemplar,
-    errorMontador,
-    errorPalafrenero,
-    mensajeError: partes.join(" "),
-  };
-}
+const SPEC_EJEMPLAR = [
+  { campo: "nombreEjemplar", validador: validarTextoLibre, etiqueta: "nombre del ejemplar" },
+  { campo: "registro", validador: validarRegistro, etiqueta: "número de registro" },
+  { campo: "criaderoDondePasta", validador: validarTextoLibre, etiqueta: "criadero donde pasta" },
+];
+const SPEC_MONTADOR = [
+  { campo: "nombreMontador", validador: validarNombre, etiqueta: "nombre del montador" },
+  { campo: "documentoMontador", validador: validarDocumento, etiqueta: "documento del montador" },
+  { campo: "telefonoMontador", validador: validarTelefono, etiqueta: "teléfono del montador" },
+];
+const SPEC_PALAFRENERO = [
+  { campo: "nombrePalafrenero", validador: validarNombre, etiqueta: "nombre del palafrenero" },
+  { campo: "telefonoPalafrenero", validador: validarTelefono, etiqueta: "teléfono del palafrenero" },
+];
 
 async function registrarEjemplarFeria(datos = {}) {
   const { loteId, datosEjemplarTexto = "", datosMontadorTexto = "", datosPalafreneroTexto = "" } = datos;
@@ -62,38 +43,50 @@ async function registrarEjemplarFeria(datos = {}) {
 
   const loteIdFinal = loteIdValido(loteId) ? loteId.trim() : generarLoteId();
 
-  const {
-    nombreEjemplar,
-    registro,
-    criaderoDondePasta,
-    sexo: sexoNormalizado,
-    modalidad,
-    categoria,
-    nombreMontador,
-    documentoMontador,
-    telefonoMontador,
-    nombrePalafrenero,
-    telefonoPalafrenero,
-  } = await organizarEjemplarCompleto(datosEjemplarTexto, datosMontadorTexto, datosPalafreneroTexto);
+  const anterior = await obtenerSeccion(loteIdFinal, "ejemplarActual");
+  const nuevo = await extraerEjemplarMontador(datosEjemplarTexto, datosMontadorTexto, datosPalafreneroTexto, anterior);
 
-  const validacion = validarBloques({
-    nombreEjemplar, registro, criaderoDondePasta,
-    nombreMontador, documentoMontador, telefonoMontador,
-    nombrePalafrenero, telefonoPalafrenero,
-  });
+  // Sexo/Modalidad/Categoría son de lista cerrada — Claude está OBLIGADO a
+  // devolver algo aunque el reintento sea un texto corto que no los
+  // menciona. Por eso, si ya se habían resuelto antes, se conservan tal
+  // cual en vez de dejar que un reintento parcial los adivine de nuevo.
+  const sexo = (anterior && anterior.sexo) || nuevo.sexo;
+  const modalidad = (anterior && anterior.modalidad) || nuevo.modalidad;
+  const categoriaTexto = (anterior && anterior.categoriaTexto) || nuevo.categoriaTexto;
 
-  // No se guarda nada todavía si falta algo — así Lucid puede volver a pedir
-  // solo el bloque incompleto y reintentar, sin dejar un registro a medias.
-  if (!validacion.valido) {
+  const resEjemplar = resolverBloque(SPEC_EJEMPLAR, nuevo, anterior);
+  const resMontador = resolverBloque(SPEC_MONTADOR, nuevo, anterior);
+  const resPalafrenero = resolverBloque(SPEC_PALAFRENERO, nuevo, anterior);
+
+  if (!resEjemplar.valido || !resMontador.valido || !resPalafrenero.valido) {
+    await guardarSeccion(loteIdFinal, "ejemplarActual", {
+      ...resEjemplar.paraGuardar,
+      ...resMontador.paraGuardar,
+      ...resPalafrenero.paraGuardar,
+      sexo,
+      modalidad,
+      categoriaTexto,
+    });
     return {
       ok: B(false),
       loteId: loteIdFinal,
-      errorEjemplar: B(validacion.errorEjemplar),
-      errorMontador: B(validacion.errorMontador),
-      errorPalafrenero: B(validacion.errorPalafrenero),
-      mensajeError: validacion.mensajeError,
+      errorEjemplar: B(!resEjemplar.valido),
+      errorMontador: B(!resMontador.valido),
+      errorPalafrenero: B(!resPalafrenero.valido),
+      mensajeErrorEjemplar: resEjemplar.valido ? "" : `Todavía falta: ${resEjemplar.problemas.join(", ")}.`,
+      mensajeErrorMontador: resMontador.valido ? "" : `Todavía falta: ${resMontador.problemas.join(", ")}.`,
+      mensajeErrorPalafrenero: resPalafrenero.valido ? "" : `Todavía falta: ${resPalafrenero.problemas.join(", ")}.`,
     };
   }
+
+  // Los 3 bloques de texto quedaron bien — ahora sí se resuelve la
+  // categoría real (depende del Sexo/Modalidad ya definitivos).
+  const categoriasReales = await obtenerCategoriasReales(modalidad, sexo);
+  const categoria = await elegirCategoriaReal(categoriaTexto, categoriasReales);
+
+  const { nombreEjemplar, registro, criaderoDondePasta } = resEjemplar.valores;
+  const { nombreMontador, documentoMontador, telefonoMontador } = resMontador.valores;
+  const { nombrePalafrenero, telefonoPalafrenero } = resPalafrenero.valores;
 
   const fecha = new Date().toISOString();
 
@@ -102,7 +95,7 @@ async function registrarEjemplarFeria(datos = {}) {
     nombreEjemplar,
     registro,
     criaderoDondePasta,
-    sexo: sexoNormalizado,
+    sexo,
     modalidad,
     categoria,
     nombreMontador,
@@ -116,6 +109,8 @@ async function registrarEjemplarFeria(datos = {}) {
     datosPalafreneroTexto,
   });
 
+  await limpiarSeccion(loteIdFinal, "ejemplarActual");
+
   // Firestore ya quedó guardado (fuente de verdad). El Sheet es un espejo para
   // el organizador — si falla o si el cupo de ese bloque ya está lleno, no se
   // pierde el registro, solo se marca para que alguien lo revise a mano.
@@ -123,7 +118,7 @@ async function registrarEjemplarFeria(datos = {}) {
   try {
     sheet = await escribirEjemplar({
       modalidad,
-      sexo: sexoNormalizado,
+      sexo,
       categoria,
       nombreEjemplar,
       registro,
@@ -168,6 +163,10 @@ async function registrarEjemplarFeria(datos = {}) {
     console.error(`Error escribiendo el ejemplar ${docRef.id} en "Información general" (sí quedó en Firestore):`, err);
   }
 
+  const resumen =
+    `Nombre: ${nombreEjemplar}\nRegistro: ${registro}\nSexo: ${sexo}\nModalidad: ${modalidad}\nCategoría: ${categoria}\n` +
+    `Criadero: ${criaderoDondePasta}\nMontador: ${nombreMontador}\nPalafrenero: ${nombrePalafrenero}`;
+
   return {
     ok: B(true),
     id: docRef.id,
@@ -177,7 +176,10 @@ async function registrarEjemplarFeria(datos = {}) {
     errorEjemplar: B(false),
     errorMontador: B(false),
     errorPalafrenero: B(false),
-    mensajeError: "",
+    mensajeErrorEjemplar: "",
+    mensajeErrorMontador: "",
+    mensajeErrorPalafrenero: "",
+    resumen,
   };
 }
 

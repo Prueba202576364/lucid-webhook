@@ -33,7 +33,17 @@ const ESQUEMA_EXTRACCION = {
   additionalProperties: false,
 };
 
-async function extraerEjemplarMontador(datosEjemplarTexto, datosMontadorTexto, datosPalafreneroTexto) {
+async function extraerEjemplarMontador(datosEjemplarTexto, datosMontadorTexto, datosPalafreneroTexto, yaConfirmado) {
+  // Cuando ya hay datos confirmados de un intento anterior (un reintento
+  // corto que solo trae el dato que faltaba), se le dice a Claude cuáles ya
+  // quedaron resueltos y cuáles siguen pendientes — si no, con un texto tan
+  // corto como "San Antonio" puede asignarlo al campo equivocado (¿nombre
+  // del ejemplar o criadero?) y pisar por error un dato que ya estaba bien.
+  const contexto = yaConfirmado && Object.values(yaConfirmado).some((v) => v)
+    ? `\nOJO: esta persona ya había dado antes estos datos, que quedaron CONFIRMADOS y no debes cambiar ni reinventar — solo repítelos tal cual si el texto nuevo no dice lo contrario:\n${JSON.stringify(yaConfirmado)}\n` +
+      `El texto nuevo probablemente solo trae el dato (o los datos) que todavía faltaban — asígnalo al campo vacío que mejor le corresponda, no lo pongas en un campo que ya estaba confirmado.\n`
+    : "";
+
   const mensaje = await client.messages.create({
     model: "claude-opus-5",
     max_tokens: 1024,
@@ -45,6 +55,7 @@ async function extraerEjemplarMontador(datosEjemplarTexto, datosMontadorTexto, d
           `Datos de un ejemplar (caballo) para una exposición equina, escritos en texto libre:\n"""${datosEjemplarTexto}"""\n\n` +
           `Datos del montador de ese ejemplar:\n"""${datosMontadorTexto}"""\n\n` +
           `Datos del palafrenero de ese ejemplar:\n"""${datosPalafreneroTexto}"""\n\n` +
+          contexto +
           `Extrae cada dato. Para "sexo", identifica si el ejemplar es Hembra o Macho según lo que escribió la persona. ` +
           `Para "modalidad", elige la opción de la lista que mejor corresponda a lo que la persona describió ` +
           `(por ejemplo si menciona "paso fino" corresponde a "Paso Fino P4"; si menciona burros o mulas corresponde a ` +
@@ -98,6 +109,12 @@ async function organizarEjemplarCompleto(datosEjemplarTexto, datosMontadorTexto,
   return { ...extraido, categoria };
 }
 
+// obtenerCategoriasReales se re-exporta porque, cuando hay un borrador con
+// Sexo/Modalidad ya resueltos de un intento anterior (y el reintento es un
+// texto corto que no los menciona), se necesita volver a llamarla con los
+// valores del borrador en vez de los recién adivinados.
+
+
 const ESQUEMA_PROPIETARIO = {
   type: "object",
   properties: {
@@ -111,7 +128,12 @@ const ESQUEMA_PROPIETARIO = {
   additionalProperties: false,
 };
 
-async function organizarPropietario(datosPropietarioTexto) {
+async function organizarPropietario(datosPropietarioTexto, yaConfirmado) {
+  const contexto = yaConfirmado && Object.values(yaConfirmado).some((v) => v)
+    ? `\nOJO: esta persona ya había dado antes estos datos, que quedaron CONFIRMADOS y no debes cambiar ni reinventar — solo repítelos tal cual si el texto nuevo no dice lo contrario:\n${JSON.stringify(yaConfirmado)}\n` +
+      `El texto nuevo probablemente solo trae el dato (o los datos) que todavía faltaban — asígnalo al campo vacío que mejor le corresponda, no lo pongas en un campo que ya estaba confirmado.\n`
+    : "";
+
   const mensaje = await client.messages.create({
     model: "claude-opus-5",
     max_tokens: 512,
@@ -121,6 +143,7 @@ async function organizarPropietario(datosPropietarioTexto) {
         role: "user",
         content:
           `Datos de el propietario/criadero de un ejemplar para una exposición equina, en texto libre:\n"""${datosPropietarioTexto}"""\n\n` +
+          contexto +
           `Extrae cada dato: nombre completo o razón social, tipo y número de documento, teléfono, correo electrónico y municipio. ` +
           `Si algún dato no aparece, deja el campo como cadena vacía — no inventes nada.`,
       },
@@ -132,4 +155,10 @@ async function organizarPropietario(datosPropietarioTexto) {
   return JSON.parse(bloque.text);
 }
 
-module.exports = { organizarEjemplarCompleto, organizarPropietario };
+module.exports = {
+  organizarEjemplarCompleto,
+  organizarPropietario,
+  extraerEjemplarMontador,
+  obtenerCategoriasReales,
+  elegirCategoriaReal,
+};
