@@ -39,7 +39,7 @@ async function agregarFila(titulo, nombreHojaSugerido, encabezados, fila) {
 
   const nombreHoja = await primeraPestana(sheets, sheetId);
 
-  await sheets.spreadsheets.values.append({
+  const { data } = await sheets.spreadsheets.values.append({
     spreadsheetId: sheetId,
     range: `${nombreHoja}!A1`,
     valueInputOption: "RAW",
@@ -47,7 +47,31 @@ async function agregarFila(titulo, nombreHojaSugerido, encabezados, fila) {
     requestBody: { values: [fila] },
   });
 
-  return sheetId;
+  // "updatedRange" viene como algo tipo "Hoja 1!A11:N11" — de ahí se saca en
+  // qué fila real quedó, para poder volver a esa misma fila más tarde (ej.
+  // cuando llegue el comprobante de pago, que se recolecta después).
+  const rango = data.updates.updatedRange;
+  const numeroFila = parseInt(rango.match(/![A-Z]+(\d+)/)[1], 10);
+
+  return { sheetId, nombreHoja, fila: numeroFila };
 }
 
-module.exports = { agregarFila };
+// Actualiza una sola celda de una fila ya existente — se usa para completar
+// el comprobante de pago cuando llega después, sin tener que reescribir toda
+// la fila ni buscarla de nuevo.
+async function actualizarCelda(nombreHoja, columnaLetra, fila, valor) {
+  const sheetId = process.env.GOOGLE_SHEET_ID;
+  if (!sheetId) {
+    throw new Error("Falta GOOGLE_SHEET_ID en las variables de entorno.");
+  }
+  const authClient = auth();
+  const sheets = google.sheets({ version: "v4", auth: authClient });
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: sheetId,
+    range: `'${nombreHoja}'!${columnaLetra}${fila}`,
+    valueInputOption: "RAW",
+    requestBody: { values: [[valor]] },
+  });
+}
+
+module.exports = { agregarFila, actualizarCelda };

@@ -8,7 +8,7 @@
 // Igual que en la feria: si falta o está mal un dato, no se guarda nada
 // todavía — se pide reenviar solo ese bloque (jinete o equino), y se combina
 // con lo que ya se tenía guardado en un borrador para no perder lo demás.
-const { collection, addDoc } = require("firebase/firestore");
+const { collection, addDoc, updateDoc } = require("firebase/firestore");
 const { db } = require("./firebaseClient");
 const { agregarFila } = require("./sheets");
 const { organizarDatosJineteEquino } = require("./organizarDatos");
@@ -130,7 +130,7 @@ async function registrarInscripcionCabalgata(datos = {}) {
   // la pena que el cliente del bot vea un error ni que Lucid reintente y quizás
   // duplique el registro. Se deja loggeado para revisar manualmente.
   try {
-    await agregarFila(TITULO_SHEET, NOMBRE_HOJA, ENCABEZADOS, [
+    const sheet = await agregarFila(TITULO_SHEET, NOMBRE_HOJA, ENCABEZADOS, [
       fecha,
       nombreCompleto,
       cedula,
@@ -146,6 +146,9 @@ async function registrarInscripcionCabalgata(datos = {}) {
       numeroMicrochip,
       soportePago,
     ]);
+    // Se guarda en qué fila y pestaña quedó, para poder completar el
+    // comprobante de pago más tarde (llega en un paso aparte, después).
+    await updateDoc(docRef, { sheetFila: sheet.fila, sheetHoja: sheet.nombreHoja });
   } catch (err) {
     console.error(`No se pudo espejar a Google Sheets la inscripción ${docRef.id} (sí quedó en Firestore):`, err);
   }
