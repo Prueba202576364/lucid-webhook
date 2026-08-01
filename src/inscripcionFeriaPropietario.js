@@ -1,10 +1,11 @@
 // Datos del propietario/criadero para la Feria — se recolecta una sola vez,
 // antes de entrar al loop de ejemplares. Genera el loteId que después se
 // reutiliza en cada ejemplar de ese mismo criadero.
-const { collection, addDoc } = require("firebase/firestore");
+const { collection, addDoc, updateDoc } = require("firebase/firestore");
 const { db } = require("./firebaseClient");
 const { organizarPropietario } = require("./organizarDatosFeria");
 const { generarLoteId, loteIdValido } = require("./loteId");
+const { escribirPropietarioGeneral } = require("./sheetsFeria");
 
 const VACIO = (v) => !v || !v.toString().trim();
 
@@ -58,6 +59,15 @@ async function registrarPropietarioFeria(datos = {}) {
     fecha,
     datosPropietarioTexto,
   });
+
+  // Best-effort: si falla, el propietario sigue guardado en Firestore, solo
+  // no queda espejado en "Información general" (se puede completar a mano).
+  try {
+    const sheet = await escribirPropietarioGeneral({ nombrePropietario, documentoPropietario, telefonoPropietario, correoPropietario, municipioPropietario });
+    await updateDoc(docRef, { infoGeneralFila: sheet.fila });
+  } catch (err) {
+    console.error(`Error escribiendo el propietario ${docRef.id} en "Información general" (sí quedó en Firestore):`, err);
+  }
 
   return { ok: B(true), id: docRef.id, loteId: loteIdFinal, mensajeError: "" };
 }

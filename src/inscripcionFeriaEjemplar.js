@@ -2,10 +2,10 @@
 // Feria. Se llama una vez por cada vuelta del loop en Lucid (no se espera al
 // final) — así, si alguien deja la conversación a la mitad, los ejemplares
 // que ya mandó no se pierden.
-const { collection, addDoc } = require("firebase/firestore");
+const { collection, addDoc, query, where, getDocs } = require("firebase/firestore");
 const { db } = require("./firebaseClient");
 const { organizarEjemplarCompleto } = require("./organizarDatosFeria");
-const { escribirEjemplar } = require("./sheetsFeria");
+const { escribirEjemplar, escribirEjemplarGeneral } = require("./sheetsFeria");
 const { generarLoteId, loteIdValido } = require("./loteId");
 
 const VACIO = (v) => !v || !v.toString().trim();
@@ -137,6 +137,35 @@ async function registrarEjemplarFeria(datos = {}) {
     }
   } catch (err) {
     console.error(`Error escribiendo en el Sheet el ejemplar ${docRef.id} (sí quedó en Firestore):`, err);
+  }
+
+  // Best-effort también: agrega el bloque de este ejemplar a la fila del
+  // propietario en "Información general" — necesita saber en qué fila quedó
+  // el propietario y qué número de ejemplar es este dentro del mismo lote.
+  try {
+    const qPropietario = query(collection(db, "inscripcionesFeriaPropietarios"), where("loteId", "==", loteIdFinal));
+    const snapPropietario = await getDocs(qPropietario);
+    if (!snapPropietario.empty) {
+      const infoGeneralFila = snapPropietario.docs[0].data().infoGeneralFila;
+      if (infoGeneralFila) {
+        const qEjemplaresPrevios = query(collection(db, "inscripcionesFeriaEjemplares"), where("loteId", "==", loteIdFinal));
+        const snapEjemplaresPrevios = await getDocs(qEjemplaresPrevios);
+        const numeroEjemplar = snapEjemplaresPrevios.size; // ya incluye el que se acaba de guardar
+        await escribirEjemplarGeneral({
+          fila: infoGeneralFila,
+          numeroEjemplar,
+          nombreEjemplar, registro, categoria, modalidad, criaderoDondePasta,
+          nombreMontador, documentoMontador, telefonoMontador,
+          nombrePalafrenero, telefonoPalafrenero,
+        });
+      } else {
+        console.warn(`Propietario del lote ${loteIdFinal} no tiene fila en "Información general" — se omite ese espejo para el ejemplar ${docRef.id}.`);
+      }
+    } else {
+      console.warn(`No se encontró propietario para el lote ${loteIdFinal} — se omite el espejo en "Información general" para el ejemplar ${docRef.id}.`);
+    }
+  } catch (err) {
+    console.error(`Error escribiendo el ejemplar ${docRef.id} en "Información general" (sí quedó en Firestore):`, err);
   }
 
   return {

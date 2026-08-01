@@ -157,4 +157,72 @@ async function escribirEjemplar({ modalidad, sexo, categoria, nombreEjemplar, re
   return { escrito: true, pestana, fila: filaReal, numeroEnBloque: filaLibre - filaInicioBloque + 1 };
 }
 
-module.exports = { obtenerCategoriasReales, escribirEjemplar, MODALIDADES_VALIDAS };
+// "Información general" es distinta a las demás: una fila por PROPIETARIO
+// (no por ejemplar), y cada ejemplar que registre ese criadero agrega un
+// bloque de 10 columnas más hacia la derecha en esa misma fila (ejemplar 1
+// en G:P, ejemplar 2 en Q:Z, ejemplar 3 en AA:AJ, y así sucesivamente).
+const PESTANA_GENERAL = "Informacion general";
+const COL_INICIO_EJEMPLARES = 7; // G
+const ANCHO_BLOQUE_EJEMPLAR = 10;
+
+// Escribe la fila del propietario (columnas A:F) en la primera fila vacía.
+// Se llama una sola vez, cuando se registra el propietario.
+async function escribirPropietarioGeneral({ nombrePropietario, documentoPropietario, telefonoPropietario, correoPropietario, municipioPropietario }) {
+  const sheetId = process.env.FERIA_SHEET_ID;
+  if (!sheetId) throw new Error("Falta FERIA_SHEET_ID en las variables de entorno.");
+
+  const authClient = auth();
+  const sheets = google.sheets({ version: "v4", auth: authClient });
+  const { data } = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range: `'${PESTANA_GENERAL}'!B3:B2000` });
+  const filas = data.values || [];
+
+  let filaLibre = -1;
+  for (let i = 0; i < filas.length; i++) {
+    if (!filas[i][0] || !filas[i][0].toString().trim()) {
+      filaLibre = i;
+      break;
+    }
+  }
+  const filaReal = filaLibre === -1 ? filas.length + 3 : filaLibre + 3; // los datos empiezan en la fila 3
+
+  const fecha = new Date().toISOString().slice(0, 10);
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: sheetId,
+    range: `'${PESTANA_GENERAL}'!A${filaReal}:F${filaReal}`,
+    valueInputOption: "RAW",
+    requestBody: { values: [[fecha, nombrePropietario, documentoPropietario, telefonoPropietario, correoPropietario, municipioPropietario]] },
+  });
+
+  return { escrito: true, fila: filaReal };
+}
+
+// Escribe el bloque de un ejemplar (10 columnas) en la fila del propietario,
+// en la posición que le corresponda según cuántos ejemplares van antes de
+// este (numeroEjemplar: 1, 2, 3...).
+async function escribirEjemplarGeneral({ fila, numeroEjemplar, nombreEjemplar, registro, categoria, modalidad, criaderoDondePasta, nombreMontador, documentoMontador, telefonoMontador, nombrePalafrenero, telefonoPalafrenero }) {
+  const sheetId = process.env.FERIA_SHEET_ID;
+  if (!sheetId) throw new Error("Falta FERIA_SHEET_ID en las variables de entorno.");
+
+  const inicioCol = COL_INICIO_EJEMPLARES + (numeroEjemplar - 1) * ANCHO_BLOQUE_EJEMPLAR;
+  const colInicio = columnaALetra(inicioCol);
+  const colFin = columnaALetra(inicioCol + 9);
+
+  const authClient = auth();
+  const sheets = google.sheets({ version: "v4", auth: authClient });
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: sheetId,
+    range: `'${PESTANA_GENERAL}'!${colInicio}${fila}:${colFin}${fila}`,
+    valueInputOption: "RAW",
+    requestBody: {
+      values: [[
+        nombreEjemplar, registro, categoria, modalidad, criaderoDondePasta,
+        nombreMontador, documentoMontador, telefonoMontador,
+        nombrePalafrenero, telefonoPalafrenero,
+      ]],
+    },
+  });
+
+  return { escrito: true, fila };
+}
+
+module.exports = { obtenerCategoriasReales, escribirEjemplar, escribirPropietarioGeneral, escribirEjemplarGeneral, MODALIDADES_VALIDAS };
