@@ -14,6 +14,7 @@ const { escribirEjemplar, escribirEjemplarGeneral } = require("./sheetsFeria");
 const { generarLoteId, loteIdValido } = require("./loteId");
 const { obtenerSeccion, guardarSeccion, limpiarSeccion, resolverBloque } = require("./borradores");
 const { validarNombre, validarDocumento, validarTelefono, validarTextoLibre, validarRegistro } = require("./validaciones");
+const { fechaColombia } = require("./fecha");
 
 const COLECCION_BORRADORES = "feriaBorradores";
 const B = (v) => (v ? "true" : "false");
@@ -89,7 +90,7 @@ async function registrarEjemplarFeria(datos = {}) {
   const { nombreMontador, documentoMontador, telefonoMontador } = resMontador.valores;
   const { nombrePalafrenero, telefonoPalafrenero } = resPalafrenero.valores;
 
-  const fecha = new Date().toISOString();
+  const fecha = fechaColombia();
 
   const docRef = await addDoc(collection(db, "inscripcionesFeriaEjemplares"), {
     loteId: loteIdFinal,

@@ -13,6 +13,7 @@ const { obtenerSeccion, guardarSeccion, limpiarSeccion, resolverBloque } = requi
 const { validarNombre, validarDocumento, validarTelefono, validarCorreo } = require("./validaciones");
 const { SILLAS_POR_PALCO, PRECIO_SILLA, sillasOcupadas } = require("./disponibilidad");
 const { agregarFila } = require("./sheets");
+const { fechaColombia } = require("./fecha");
 
 const COLECCION_BORRADORES = "reservaBorradores";
 const B = (v) => (v ? "true" : "false");
@@ -193,7 +194,7 @@ async function registrarReservaPalco(datos = {}) {
     for (const d of dias) cantidadPorDia[d.dia] = d.cantidad;
   }
 
-  const fecha = new Date().toLocaleString("es-CO");
+  const fecha = fechaColombia();
 
   const reservaInfo = {
     fecha,

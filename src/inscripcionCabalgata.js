@@ -15,6 +15,7 @@ const { organizarDatosJineteEquino } = require("./organizarDatos");
 const { generarLoteId, loteIdValido } = require("./loteId");
 const { obtenerSeccion, guardarSeccion, limpiarSeccion, resolverBloque } = require("./borradores");
 const { validarNombre, validarDocumento, validarTelefono, validarMunicipio, validarTextoLibre, validarEdad } = require("./validaciones");
+const { fechaColombia } = require("./fecha");
 
 // "contacto" casi siempre es el mismo número que "teléfono" — no tiene
 // sentido pedirlo dos veces. Si la persona no lo dio como algo distinto, se
@@ -111,7 +112,7 @@ async function registrarInscripcionCabalgata(datos = {}) {
   const { nombreCompleto, cedula, telefono, municipio } = resJinete.valores;
   const contacto = resolverContacto(nuevo, anterior, telefono);
   const { nombreEjemplar, edadEquino } = resEquino.valores;
-  const fecha = new Date().toISOString();
+  const fecha = fechaColombia();
 
   const docRef = await addDoc(collection(db, "inscripcionesCabalgata"), {
     loteId: loteIdFinal,

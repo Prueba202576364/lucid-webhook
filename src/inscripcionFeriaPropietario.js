@@ -13,6 +13,7 @@ const { generarLoteId, loteIdValido } = require("./loteId");
 const { escribirPropietarioGeneral } = require("./sheetsFeria");
 const { obtenerSeccion, guardarSeccion, limpiarSeccion, resolverBloque } = require("./borradores");
 const { validarNombre, validarDocumento, validarTelefono, validarCorreo, validarMunicipio } = require("./validaciones");
+const { fechaColombia } = require("./fecha");
 
 const COLECCION_BORRADORES = "feriaBorradores";
 const B = (v) => (v ? "true" : "false");
@@ -50,7 +51,7 @@ async function registrarPropietarioFeria(datos = {}) {
   }
 
   const { nombrePropietario, documentoPropietario, telefonoPropietario, correoPropietario, municipioPropietario } = valores;
-  const fecha = new Date().toISOString();
+  const fecha = fechaColombia();
 
   const docRef = await addDoc(collection(db, "inscripcionesFeriaPropietarios"), {
     loteId: loteIdFinal,

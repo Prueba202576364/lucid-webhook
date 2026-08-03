@@ -4,6 +4,7 @@
 // Categoría. Hay que encontrar el bloque correcto y la primera fila vacía
 // dentro de ese bloque.
 const { google } = require("googleapis");
+const { fechaColombia } = require("./fecha");
 
 const SCOPES = ["https://www.googleapis.com/auth/spreadsheets"];
 
@@ -185,7 +186,7 @@ async function escribirPropietarioGeneral({ nombrePropietario, documentoPropieta
   }
   const filaReal = filaLibre === -1 ? filas.length + 3 : filaLibre + 3; // los datos empiezan en la fila 3
 
-  const fecha = new Date().toISOString().slice(0, 10);
+  const fecha = fechaColombia();
   await sheets.spreadsheets.values.update({
     spreadsheetId: sheetId,
     range: `'${PESTANA_GENERAL}'!A${filaReal}:F${filaReal}`,
