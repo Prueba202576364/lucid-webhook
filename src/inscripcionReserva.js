@@ -7,7 +7,7 @@
 // a diferencia de cabalgata/feria que separan el comprobante en un paso aparte.
 const { collection, addDoc, doc, getDoc, serverTimestamp } = require("firebase/firestore");
 const { db } = require("./firebaseClient");
-const { extraerCliente, extraerTipoPalco, extraerDiasSillas } = require("./organizarDatosReserva");
+const { extraerCliente, extraerTipoPalco, extraerDiasSillas, extraerNumeroPalco } = require("./organizarDatosReserva");
 const { generarLoteId, loteIdValido } = require("./loteId");
 const { obtenerSeccion, guardarSeccion, limpiarSeccion, resolverBloque } = require("./borradores");
 const { validarNombre, validarDocumento, validarTelefono, validarCorreo } = require("./validaciones");
@@ -50,6 +50,8 @@ async function registrarReservaPalco(datos = {}) {
     datosClienteTexto = "",
     tipoPalcoTexto = "",
     datosDiasTexto = "",
+    numeroPalcoCompletoTexto = "",
+    numeroPalcoSillasTexto = "",
     comprobantePago = "",
   } = datos;
 
@@ -102,17 +104,32 @@ async function registrarReservaPalco(datos = {}) {
     const configSnap = await getDoc(doc(db, "feria", "configuracion"));
     const precioPorDefecto = configSnap.exists() ? configSnap.data().precioPalcoCompleto ?? null : null;
 
-    const disponibles = palcos
-      .filter((p) => p.tipo === "completo" && p.estado === "disponible")
-      .sort((a, b) => a.numero - b.numero);
-    if (disponibles.length === 0) {
-      return respuestaError({
-        loteId: loteIdFinal,
-        errorSeleccion: true,
-        mensajeErrorSeleccion: "Ya no quedan palcos completos disponibles.",
-      });
+    const numeroPedido = extraerNumeroPalco(numeroPalcoCompletoTexto);
+    if (numeroPedido) {
+      // La persona pidió un número específico — se respeta tal cual, no se
+      // le cambia por otro sin avisar; si no sirve, se le dice por qué.
+      const p = palcos.find((x) => x.numero === numeroPedido);
+      if (!p || p.tipo !== "completo" || p.estado !== "disponible") {
+        return respuestaError({
+          loteId: loteIdFinal,
+          errorSeleccion: true,
+          mensajeErrorSeleccion: `El palco #${numeroPedido} no existe como palco completo o ya no está disponible — indique otro número.`,
+        });
+      }
+      palcoAsignado = p;
+    } else {
+      const disponibles = palcos
+        .filter((p) => p.tipo === "completo" && p.estado === "disponible")
+        .sort((a, b) => a.numero - b.numero);
+      if (disponibles.length === 0) {
+        return respuestaError({
+          loteId: loteIdFinal,
+          errorSeleccion: true,
+          mensajeErrorSeleccion: "Ya no quedan palcos completos disponibles.",
+        });
+      }
+      palcoAsignado = disponibles[0];
     }
-    palcoAsignado = disponibles[0];
     monto = palcoAsignado.precio ?? precioPorDefecto;
     cantidadTexto = "10 sillas (completo)";
     diasTexto = "Todos los días";
@@ -126,26 +143,50 @@ async function registrarReservaPalco(datos = {}) {
       });
     }
 
-    const palcosSillas = palcos.filter((p) => p.tipo === "sillas");
-    let elegido = null;
-    for (const p of palcosSillas) {
+    const numeroPedido = extraerNumeroPalco(numeroPalcoSillasTexto);
+    if (numeroPedido) {
+      const p = palcos.find((x) => x.numero === numeroPedido && x.tipo === "sillas");
+      if (!p) {
+        return respuestaError({
+          loteId: loteIdFinal,
+          errorSeleccion: true,
+          mensajeErrorSeleccion: `El palco #${numeroPedido} no existe como palco de sillas — indique otro número.`,
+        });
+      }
       const cabeTodo = dias.every((d) => {
         const ocupadas = sillasOcupadas(p.reservas?.[d.dia]);
         return SILLAS_POR_PALCO - ocupadas >= d.cantidad;
       });
-      if (cabeTodo) {
-        elegido = p;
-        break;
+      if (!cabeTodo) {
+        return respuestaError({
+          loteId: loteIdFinal,
+          errorSeleccion: true,
+          mensajeErrorSeleccion: `El palco #${numeroPedido} ya no tiene cupo suficiente para lo que pidió — intente con menos sillas, otro día, u otro palco.`,
+        });
       }
+      palcoAsignado = p;
+    } else {
+      const palcosSillas = palcos.filter((p) => p.tipo === "sillas");
+      let elegido = null;
+      for (const p of palcosSillas) {
+        const cabeTodo = dias.every((d) => {
+          const ocupadas = sillasOcupadas(p.reservas?.[d.dia]);
+          return SILLAS_POR_PALCO - ocupadas >= d.cantidad;
+        });
+        if (cabeTodo) {
+          elegido = p;
+          break;
+        }
+      }
+      if (!elegido) {
+        return respuestaError({
+          loteId: loteIdFinal,
+          errorSeleccion: true,
+          mensajeErrorSeleccion: "Ya no hay suficiente cupo de sillas para lo que pidió — intente con menos sillas o cambie de día.",
+        });
+      }
+      palcoAsignado = elegido;
     }
-    if (!elegido) {
-      return respuestaError({
-        loteId: loteIdFinal,
-        errorSeleccion: true,
-        mensajeErrorSeleccion: "Ya no hay suficiente cupo de sillas para lo que pidió — intente con menos sillas o cambie de día.",
-      });
-    }
-    palcoAsignado = elegido;
     monto = dias.reduce((total, d) => total + d.cantidad * (PRECIO_SILLA[d.dia] || 0), 0);
     cantidadTexto = dias.reduce((total, d) => total + d.cantidad, 0);
     diasTexto = dias.map((d) => `${d.dia}: ${d.cantidad}`).join(", ");

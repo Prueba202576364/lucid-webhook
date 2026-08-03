@@ -102,4 +102,11 @@ async function extraerDiasSillas(datosDiasTexto) {
   return JSON.parse(bloque.text).dias;
 }
 
-module.exports = { extraerCliente, extraerTipoPalco, extraerDiasSillas, DIAS_VALIDOS };
+// Extrae el primer número que aparezca en el texto (ej. "el palco 12 porfa"
+// -> 12) — no hace falta Claude para esto, es solo un dígito suelto.
+function extraerNumeroPalco(texto) {
+  const m = (texto || "").toString().match(/\d+/);
+  return m ? parseInt(m[0], 10) : null;
+}
+
+module.exports = { extraerCliente, extraerTipoPalco, extraerDiasSillas, extraerNumeroPalco, DIAS_VALIDOS };
