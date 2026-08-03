@@ -26,11 +26,11 @@ async function primeraPestana(sheets, sheetId) {
   return data.sheets[0].properties.title;
 }
 
-async function agregarFila(titulo, nombreHojaSugerido, encabezados, fila) {
-  const sheetId = process.env.GOOGLE_SHEET_ID;
+async function agregarFila(titulo, nombreHojaSugerido, encabezados, fila, sheetIdParam) {
+  const sheetId = sheetIdParam || process.env.GOOGLE_SHEET_ID;
   if (!sheetId) {
     throw new Error(
-      "Falta GOOGLE_SHEET_ID — crea el Sheet manualmente, compártelo (Editor) con la cuenta de servicio, y pon su ID en esta variable."
+      "Falta el ID del Sheet — crea el Sheet manualmente, compártelo (Editor) con la cuenta de servicio, y pon su ID en la variable de entorno correspondiente."
     );
   }
 
@@ -39,19 +39,33 @@ async function agregarFila(titulo, nombreHojaSugerido, encabezados, fila) {
 
   const nombreHoja = await primeraPestana(sheets, sheetId);
 
-  const { data } = await sheets.spreadsheets.values.append({
+  // No se usa "append" con detección automática de tabla — con encabezados
+  // de varias filas o celdas combinadas (como una fila de agrupación arriba
+  // de los títulos reales), Google a veces decide que la "tabla" está vacía
+  // y termina insertando ARRIBA de los encabezados en vez de debajo de todo.
+  // Se calcula la primera fila realmente vacía a mano, revisando todas las
+  // columnas (no solo la A, que puede estar en blanco en una fila de
+  // encabezado agrupado) y se escribe ahí con un "update" directo.
+  const finCol = String.fromCharCode(64 + Math.max(fila.length, encabezados.length, 26));
+  const { data: existentes } = await sheets.spreadsheets.values.get({
     spreadsheetId: sheetId,
-    range: `${nombreHoja}!A1`,
+    range: `'${nombreHoja}'!A1:${finCol}2000`,
+  });
+  const filas = existentes.values || [];
+  let ultimaConContenido = 0;
+  filas.forEach((f, i) => {
+    if (f.some((celda) => celda !== undefined && celda !== null && celda.toString().trim() !== "")) {
+      ultimaConContenido = i + 1;
+    }
+  });
+  const numeroFila = ultimaConContenido + 1;
+
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: sheetId,
+    range: `'${nombreHoja}'!A${numeroFila}`,
     valueInputOption: "RAW",
-    insertDataOption: "INSERT_ROWS",
     requestBody: { values: [fila] },
   });
-
-  // "updatedRange" viene como algo tipo "Hoja 1!A11:N11" — de ahí se saca en
-  // qué fila real quedó, para poder volver a esa misma fila más tarde (ej.
-  // cuando llegue el comprobante de pago, que se recolecta después).
-  const rango = data.updates.updatedRange;
-  const numeroFila = parseInt(rango.match(/![A-Z]+(\d+)/)[1], 10);
 
   return { sheetId, nombreHoja, fila: numeroFila };
 }

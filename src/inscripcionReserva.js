@@ -12,9 +12,19 @@ const { generarLoteId, loteIdValido } = require("./loteId");
 const { obtenerSeccion, guardarSeccion, limpiarSeccion, resolverBloque } = require("./borradores");
 const { validarNombre, validarDocumento, validarTelefono, validarCorreo } = require("./validaciones");
 const { SILLAS_POR_PALCO, PRECIO_SILLA, sillasOcupadas } = require("./disponibilidad");
+const { agregarFila } = require("./sheets");
 
 const COLECCION_BORRADORES = "reservaBorradores";
 const B = (v) => (v ? "true" : "false");
+
+const TITULO_SHEET = "reservas palcos";
+const NOMBRE_HOJA = "Hoja 1";
+const ENCABEZADOS = [
+  "Fecha inscripcion", "nombre completo", "cedula", "telefono", "correo electronico",
+  "tipo de palco", "palco reservado", "cantidad sillas viernes", "cantidad sillas sabado",
+  "cantidad sillas domingo", "numero de palco reservado", "valor pagado por palco",
+  "valor total", "medio de pago", "comprobante de pago",
+];
 
 const SPEC_CLIENTE = [
   { campo: "nombreCompleto", validador: validarNombre, etiqueta: "nombre completo" },
@@ -86,6 +96,7 @@ async function registrarReservaPalco(datos = {}) {
   let monto;
   let cantidadTexto;
   let diasTexto;
+  const cantidadPorDia = { viernes: "", sabado: "", domingo: "" };
 
   if (tipoPalco === "COMPLETO") {
     const configSnap = await getDoc(doc(db, "feria", "configuracion"));
@@ -138,6 +149,7 @@ async function registrarReservaPalco(datos = {}) {
     monto = dias.reduce((total, d) => total + d.cantidad * (PRECIO_SILLA[d.dia] || 0), 0);
     cantidadTexto = dias.reduce((total, d) => total + d.cantidad, 0);
     diasTexto = dias.map((d) => `${d.dia}: ${d.cantidad}`).join(", ");
+    for (const d of dias) cantidadPorDia[d.dia] = d.cantidad;
   }
 
   const fecha = new Date().toLocaleString("es-CO");
@@ -180,6 +192,36 @@ async function registrarReservaPalco(datos = {}) {
   const pagoRef = await addDoc(collection(db, "pagosPendientes"), pagoPendiente);
 
   await limpiarSeccion(COLECCION_BORRADORES, loteIdFinal, "cliente");
+
+  // Firestore ya quedó guardado (fuente de verdad). El Sheet es un espejo
+  // best-effort para que lo vean sin entrar a Firebase.
+  try {
+    await agregarFila(
+      TITULO_SHEET,
+      NOMBRE_HOJA,
+      ENCABEZADOS,
+      [
+        fecha,
+        nombreCompleto,
+        cedula,
+        telefono,
+        correo,
+        tipoPalco === "COMPLETO" ? "Completo" : "Sillas",
+        tipoPalco === "SILLAS" ? palcoAsignado.numero : "",
+        cantidadPorDia.viernes,
+        cantidadPorDia.sabado,
+        cantidadPorDia.domingo,
+        tipoPalco === "COMPLETO" ? palcoAsignado.numero : "",
+        tipoPalco === "COMPLETO" ? monto : "",
+        monto,
+        "",
+        comprobantePago,
+      ],
+      process.env.RESERVA_SHEET_ID
+    );
+  } catch (err) {
+    console.error(`Error escribiendo la reserva ${reservaRef.id} en el Sheet (sí quedó en Firestore):`, err);
+  }
 
   const resumen =
     `Responsable: ${nombreCompleto}\nCédula: ${cedula}\nTeléfono: ${telefono}\n` +
