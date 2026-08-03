@@ -96,4 +96,4 @@ async function obtenerDisponibilidad() {
   };
 }
 
-module.exports = { obtenerDisponibilidad };
+module.exports = { obtenerDisponibilidad, SILLAS_POR_PALCO, PRECIO_SILLA, DIAS, ESTADOS_QUE_NO_OCUPAN, sillasOcupadas };
