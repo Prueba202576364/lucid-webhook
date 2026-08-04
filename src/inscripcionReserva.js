@@ -99,7 +99,7 @@ async function registrarReservaPalco(datos = {}) {
       // La persona pidió un número específico — se respeta tal cual, no se
       // le cambia por otro sin avisar; si no sirve, se le dice por qué.
       const p = palcos.find((x) => x.numero === numeroPedido);
-      if (!p || p.tipo !== "completo" || p.estado !== "disponible") {
+      if (!p || p.tipo !== "completo" || p.estado !== "disponible" || p.bloqueado) {
         return respuestaError({
           loteId: loteIdFinal,
           errorSeleccion: true,
@@ -109,7 +109,7 @@ async function registrarReservaPalco(datos = {}) {
       palcoAsignado = p;
     } else {
       const disponibles = palcos
-        .filter((p) => p.tipo === "completo" && p.estado === "disponible")
+        .filter((p) => p.tipo === "completo" && p.estado === "disponible" && !p.bloqueado)
         .sort((a, b) => a.numero - b.numero);
       if (disponibles.length === 0) {
         return respuestaError({
@@ -136,11 +136,11 @@ async function registrarReservaPalco(datos = {}) {
     const numeroPedido = extraerNumeroPalco(numeroPalcoSillasTexto);
     if (numeroPedido) {
       const p = palcos.find((x) => x.numero === numeroPedido && x.tipo === "sillas");
-      if (!p) {
+      if (!p || p.bloqueado) {
         return respuestaError({
           loteId: loteIdFinal,
           errorSeleccion: true,
-          mensajeErrorSeleccion: `El palco #${numeroPedido} no existe como palco de sillas — indique otro número.`,
+          mensajeErrorSeleccion: `El palco #${numeroPedido} no existe como palco de sillas o no está disponible — indique otro número.`,
         });
       }
       const cabeTodo = dias.every((d) => {
@@ -156,7 +156,7 @@ async function registrarReservaPalco(datos = {}) {
       }
       palcoAsignado = p;
     } else {
-      const palcosSillas = palcos.filter((p) => p.tipo === "sillas");
+      const palcosSillas = palcos.filter((p) => p.tipo === "sillas" && !p.bloqueado);
       let elegido = null;
       for (const p of palcosSillas) {
         const cabeTodo = dias.every((d) => {

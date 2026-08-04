@@ -11,10 +11,10 @@ const DIAS = ["viernes", "sabado", "domingo"];
 const ESTADOS_QUE_NO_OCUPAN = new Set(["cancelada", "rechazada"]);
 
 // El precio por silla no vive en Firestore: está hardcodeado en el frontend de
-// palco-reservas (src/App.jsx, constante PRECIO_SILLA) en $120.000 los tres días.
+// palco-reservas (src/App.jsx, constante PRECIO_SILLA) en $150.000 los tres días.
 // Si el organizador cambia ese valor ahí, hay que actualizarlo también acá — no
 // hay una única fuente de verdad para este precio todavía.
-const PRECIO_SILLA = { viernes: 120000, sabado: 120000, domingo: 120000 };
+const PRECIO_SILLA = { viernes: 150000, sabado: 150000, domingo: 150000 };
 
 function sillasOcupadas(reservasDelDia = []) {
   return reservasDelDia
@@ -24,6 +24,15 @@ function sillasOcupadas(reservasDelDia = []) {
 
 function formatearPesos(valor) {
   return `$${valor.toLocaleString("es-CO")}`;
+}
+
+// "14, 21 y 34" en vez de "14, 21, 34" — para que el texto ya quede listo
+// para insertar directo en el mensaje del bot, sin que Lucid tenga que
+// procesar una lista.
+function listarConY(numeros) {
+  if (numeros.length === 0) return "";
+  if (numeros.length === 1) return `${numeros[0]}`;
+  return `${numeros.slice(0, -1).join(", ")} y ${numeros[numeros.length - 1]}`;
 }
 
 // Cada palco completo puede tener su propio precio (se asigna palco por palco
@@ -64,13 +73,19 @@ async function obtenerDisponibilidad() {
   const palcos = palcosSnap.exists() ? palcosSnap.data().palcos || [] : [];
   const precioPalcoCompleto = configSnap.exists() ? configSnap.data().precioPalcoCompleto ?? null : null;
 
+  // "estado: disponible" no basta — un palco puede seguir marcado como
+  // disponible en cuanto a venta y aun así estar bloqueado manualmente por
+  // un admin desde palco-reservas (candado en el mapa, campo "bloqueado"
+  // independiente del estado). Si no se filtra también por eso, se ofrecen
+  // palcos que en realidad no están a la venta.
   const completosDisponibles = palcos
-    .filter((p) => p.tipo === "completo" && p.estado === "disponible")
+    .filter((p) => p.tipo === "completo" && p.estado === "disponible" && !p.bloqueado)
     .sort((a, b) => a.numero - b.numero);
 
   const { porPrecio, resumenPrecios } = agruparPorPrecio(completosDisponibles, precioPalcoCompleto);
 
-  const palcosSillas = palcos.filter((p) => p.tipo === "sillas");
+  const palcosSillas = palcos.filter((p) => p.tipo === "sillas" && !p.bloqueado);
+  const numerosPalcosSillas = palcosSillas.map((p) => p.numero).sort((a, b) => a - b);
   const totalSillas = palcosSillas.length * SILLAS_POR_PALCO;
 
   const sillas = {};
@@ -92,6 +107,8 @@ async function obtenerDisponibilidad() {
       resumenPrecios,
     },
     sillas,
+    palcosSillasNumeros: numerosPalcosSillas,
+    palcosSillasNumerosTexto: listarConY(numerosPalcosSillas),
   };
 }
 
