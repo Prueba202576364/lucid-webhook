@@ -4,6 +4,7 @@
 // en sí no dependía de Kommo para nada, así que se rescata completa acá.
 const { doc, getDoc } = require("firebase/firestore");
 const { db } = require("./firebaseClient");
+const { fechaColombia } = require("./fecha");
 
 const SILLAS_POR_PALCO = 10;
 const DIAS = ["viernes", "sabado", "domingo"];
@@ -69,14 +70,12 @@ async function obtenerDisponibilidad() {
 
   const { porPrecio, resumenPrecios } = agruparPorPrecio(completosDisponibles, precioPalcoCompleto);
 
+  const palcosSillas = palcos.filter((p) => p.tipo === "sillas");
+  const totalSillas = palcosSillas.length * SILLAS_POR_PALCO;
+
   const sillas = {};
   for (const dia of DIAS) {
-    let ocupadas = 0;
-    let totalSillas = 0;
-    for (const p of palcos.filter((p) => p.tipo === "sillas")) {
-      totalSillas += SILLAS_POR_PALCO;
-      ocupadas += sillasOcupadas(p.reservas?.[dia]);
-    }
+    const ocupadas = palcosSillas.reduce((total, p) => total + sillasOcupadas(p.reservas?.[dia]), 0);
     sillas[dia] = {
       disponibles: Math.max(0, totalSillas - ocupadas),
       precio: PRECIO_SILLA[dia],
@@ -85,7 +84,7 @@ async function obtenerDisponibilidad() {
 
   return {
     ok: true,
-    actualizado: new Date().toISOString(),
+    actualizado: fechaColombia(),
     palcosCompletos: {
       disponibles: completosDisponibles.length,
       numeros: completosDisponibles.map((p) => p.numero),
