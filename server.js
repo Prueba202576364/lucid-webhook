@@ -8,7 +8,8 @@ try {
 }
 const http = require("http");
 const { obtenerDisponibilidad } = require("./src/disponibilidad");
-const { registrarInscripcionCabalgata } = require("./src/inscripcionCabalgata");
+const { registrarJineteCabalgata } = require("./src/inscripcionCabalgataJinete");
+const { registrarEquinoCabalgata } = require("./src/inscripcionCabalgataEquino");
 const { registrarComprobanteCabalgata } = require("./src/comprobanteCabalgata");
 const { registrarEjemplarFeria } = require("./src/inscripcionFeriaEjemplar");
 const { registrarPropietarioFeria } = require("./src/inscripcionFeriaPropietario");
@@ -58,7 +59,7 @@ async function manejarDisponibilidad(req, res) {
   }
 }
 
-async function manejarInscripcionCabalgata(req, res) {
+async function manejarInscripcionCabalgataJinete(req, res) {
   if (!estaAutorizado(req)) {
     res.writeHead(401, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, error: "no autorizado" }));
     return;
@@ -73,10 +74,36 @@ async function manejarInscripcionCabalgata(req, res) {
   }
 
   try {
-    const resultado = await registrarInscripcionCabalgata(datos);
+    const resultado = await registrarJineteCabalgata(datos);
     res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, ...resultado }));
   } catch (err) {
-    console.error("Error registrando inscripción de cabalgata:", err);
+    console.error("Error registrando jinete de cabalgata:", err);
+    const status = err.status || 500;
+    res
+      .writeHead(status, { "Content-Type": "application/json" })
+      .end(JSON.stringify({ ok: false, error: status === 400 ? err.message : "error interno" }));
+  }
+}
+
+async function manejarInscripcionCabalgataEquino(req, res) {
+  if (!estaAutorizado(req)) {
+    res.writeHead(401, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, error: "no autorizado" }));
+    return;
+  }
+
+  let datos;
+  try {
+    datos = await leerCuerpoJSON(req);
+  } catch (err) {
+    res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, error: "cuerpo no es JSON válido" }));
+    return;
+  }
+
+  try {
+    const resultado = await registrarEquinoCabalgata(datos);
+    res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, ...resultado }));
+  } catch (err) {
+    console.error("Error registrando equino de cabalgata:", err);
     const status = err.status || 500;
     res
       .writeHead(status, { "Content-Type": "application/json" })
@@ -200,8 +227,13 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  if (req.method === "POST" && req.url === "/inscripcion-cabalgata") {
-    manejarInscripcionCabalgata(req, res);
+  if (req.method === "POST" && req.url === "/inscripcion-cabalgata-jinete") {
+    manejarInscripcionCabalgataJinete(req, res);
+    return;
+  }
+
+  if (req.method === "POST" && req.url === "/inscripcion-cabalgata-equino") {
+    manejarInscripcionCabalgataEquino(req, res);
     return;
   }
 

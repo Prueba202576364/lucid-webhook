@@ -73,10 +73,10 @@ async function agregarFila(titulo, nombreHojaSugerido, encabezados, fila, sheetI
 // Actualiza una sola celda de una fila ya existente — se usa para completar
 // el comprobante de pago cuando llega después, sin tener que reescribir toda
 // la fila ni buscarla de nuevo.
-async function actualizarCelda(nombreHoja, columnaLetra, fila, valor) {
-  const sheetId = process.env.GOOGLE_SHEET_ID;
+async function actualizarCelda(nombreHoja, columnaLetra, fila, valor, sheetIdParam) {
+  const sheetId = sheetIdParam || process.env.GOOGLE_SHEET_ID;
   if (!sheetId) {
-    throw new Error("Falta GOOGLE_SHEET_ID en las variables de entorno.");
+    throw new Error("Falta el ID del Sheet en las variables de entorno.");
   }
   const authClient = auth();
   const sheets = google.sheets({ version: "v4", auth: authClient });
@@ -88,4 +88,22 @@ async function actualizarCelda(nombreHoja, columnaLetra, fila, valor) {
   });
 }
 
-module.exports = { agregarFila, actualizarCelda };
+// Igual que actualizarCelda, pero para varias columnas consecutivas de una
+// misma fila de una sola vez — se usa cuando un bloque posterior (ej. el
+// equino, después del jinete) completa varias columnas juntas.
+async function actualizarRango(nombreHoja, columnaInicioLetra, columnaFinLetra, fila, valores, sheetIdParam) {
+  const sheetId = sheetIdParam || process.env.GOOGLE_SHEET_ID;
+  if (!sheetId) {
+    throw new Error("Falta el ID del Sheet en las variables de entorno.");
+  }
+  const authClient = auth();
+  const sheets = google.sheets({ version: "v4", auth: authClient });
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: sheetId,
+    range: `'${nombreHoja}'!${columnaInicioLetra}${fila}:${columnaFinLetra}${fila}`,
+    valueInputOption: "RAW",
+    requestBody: { values: [valores] },
+  });
+}
+
+module.exports = { agregarFila, actualizarCelda, actualizarRango };
