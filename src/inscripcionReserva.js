@@ -3,14 +3,16 @@
 // app `palcos-cliente` (colecciones `reservas` + `pagosPendientes`, ambas
 // con appOrigen:'cliente') — así aparece en la pantalla "Reservas Cliente"
 // que el vendedor ya usa hoy en `palco-reservas`, sin tocar nada de esas dos
-// apps. Todo se manda de una sola vez (cliente + selección + comprobante),
-// a diferencia de cabalgata/feria que separan el comprobante en un paso aparte.
+// apps.
+//
+// Los datos del cliente ya se validaron y confirmaron aparte (ver
+// inscripcionReservaCliente.js) — este endpoint solo se encarga de la
+// selección del palco/sillas y el comprobante, y lee el cliente ya
+// confirmado por loteId en vez de volver a pedirlo.
 const { collection, addDoc, doc, getDoc, serverTimestamp } = require("firebase/firestore");
 const { db } = require("./firebaseClient");
-const { extraerCliente, extraerTipoPalco, extraerDiasSillas, extraerNumeroPalco } = require("./organizarDatosReserva");
-const { generarLoteId, loteIdValido } = require("./loteId");
-const { obtenerSeccion, guardarSeccion, limpiarSeccion, resolverBloque } = require("./borradores");
-const { validarNombre, validarDocumento, validarTelefono, validarCorreo } = require("./validaciones");
+const { extraerTipoPalco, extraerDiasSillas, extraerNumeroPalco } = require("./organizarDatosReserva");
+const { obtenerSeccion, limpiarSeccion } = require("./borradores");
 const { SILLAS_POR_PALCO, PRECIO_SILLA, sillasOcupadas } = require("./disponibilidad");
 const { agregarFila } = require("./sheets");
 const { fechaColombia } = require("./fecha");
@@ -27,13 +29,6 @@ const ENCABEZADOS = [
   "valor total", "medio de pago", "comprobante de pago",
 ];
 
-const SPEC_CLIENTE = [
-  { campo: "nombreCompleto", validador: validarNombre, etiqueta: "nombre completo" },
-  { campo: "cedula", validador: validarDocumento, etiqueta: "cédula" },
-  { campo: "telefono", validador: validarTelefono, etiqueta: "teléfono" },
-  { campo: "correo", validador: validarCorreo, etiqueta: "correo electrónico" },
-];
-
 function respuestaError({ loteId, errorCliente = false, errorSeleccion = false, mensajeErrorCliente = "", mensajeErrorSeleccion = "" }) {
   return {
     ok: B(false),
@@ -48,7 +43,6 @@ function respuestaError({ loteId, errorCliente = false, errorSeleccion = false, 
 async function registrarReservaPalco(datos = {}) {
   const {
     loteId,
-    datosClienteTexto = "",
     tipoPalcoTexto = "",
     datosDiasTexto = "",
     numeroPalcoCompletoTexto = "",
@@ -56,28 +50,23 @@ async function registrarReservaPalco(datos = {}) {
     comprobantePago = "",
   } = datos;
 
-  if (!datosClienteTexto || !tipoPalcoTexto || !comprobantePago) {
-    const error = new Error("Faltan campos obligatorios: datosClienteTexto, tipoPalcoTexto y comprobantePago.");
+  if (!loteId || !loteId.trim() || !tipoPalcoTexto || !comprobantePago) {
+    const error = new Error("Faltan campos obligatorios: loteId, tipoPalcoTexto y comprobantePago.");
     error.status = 400;
     throw error;
   }
 
-  const loteIdFinal = loteIdValido(loteId) ? loteId.trim() : generarLoteId();
+  const loteIdFinal = loteId.trim();
 
-  const anterior = await obtenerSeccion(COLECCION_BORRADORES, loteIdFinal, "cliente");
-  const nuevo = await extraerCliente(datosClienteTexto, anterior);
-  const resCliente = resolverBloque(SPEC_CLIENTE, nuevo, anterior);
-
-  if (!resCliente.valido) {
-    await guardarSeccion(COLECCION_BORRADORES, loteIdFinal, "cliente", resCliente.paraGuardar);
+  const cliente = await obtenerSeccion(COLECCION_BORRADORES, loteIdFinal, "clienteConfirmado");
+  if (!cliente) {
     return respuestaError({
       loteId: loteIdFinal,
       errorCliente: true,
-      mensajeErrorCliente: `Todavía falta: ${resCliente.problemas.join(", ")}.`,
+      mensajeErrorCliente: "No encontré los datos del responsable para ese loteId — primero hay que registrarlos.",
     });
   }
-
-  const { nombreCompleto, cedula, telefono, correo } = resCliente.valores;
+  const { nombreCompleto, cedula, telefono, correo } = cliente;
 
   const tipoPalco = extraerTipoPalco(tipoPalcoTexto);
   if (!tipoPalco) {
@@ -233,7 +222,7 @@ async function registrarReservaPalco(datos = {}) {
 
   const pagoRef = await addDoc(collection(db, "pagosPendientes"), pagoPendiente);
 
-  await limpiarSeccion(COLECCION_BORRADORES, loteIdFinal, "cliente");
+  await limpiarSeccion(COLECCION_BORRADORES, loteIdFinal, "clienteConfirmado");
 
   // Firestore ya quedó guardado (fuente de verdad). El Sheet es un espejo
   // best-effort para que lo vean sin entrar a Firebase.
