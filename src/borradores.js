@@ -51,7 +51,12 @@ function resolverBloque(spec, nuevo, anterior) {
       paraGuardar[campo] = anteriorRaw;
       continue;
     }
-    paraGuardar[campo] = nuevoRaw || anteriorRaw || "";
+    // Ninguno de los dos sirvió — se guarda vacío, NO el intento fallido.
+    // Si se guardara ese valor inválido, en el próximo intento se le diría a
+    // Claude "esto ya quedó confirmado, no lo cambies" para un campo que en
+    // realidad nunca pasó — y entonces ignoraría la respuesta nueva y
+    // seguiría repitiendo el mismo valor malo una y otra vez.
+    paraGuardar[campo] = "";
     problemas.push(`${etiqueta} (${rNuevo.motivo})`);
   }
 
