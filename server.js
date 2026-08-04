@@ -11,7 +11,9 @@ const { obtenerDisponibilidad } = require("./src/disponibilidad");
 const { registrarJineteCabalgata } = require("./src/inscripcionCabalgataJinete");
 const { registrarEquinoCabalgata } = require("./src/inscripcionCabalgataEquino");
 const { registrarComprobanteCabalgata } = require("./src/comprobanteCabalgata");
-const { registrarEjemplarFeria } = require("./src/inscripcionFeriaEjemplar");
+const { registrarEjemplarDatos } = require("./src/inscripcionFeriaEjemplarDatos");
+const { registrarMontador } = require("./src/inscripcionFeriaMontador");
+const { registrarPalafrenero } = require("./src/inscripcionFeriaPalafrenero");
 const { registrarPropietarioFeria } = require("./src/inscripcionFeriaPropietario");
 const { registrarReservaPalco } = require("./src/inscripcionReserva");
 
@@ -111,7 +113,7 @@ async function manejarInscripcionCabalgataEquino(req, res) {
   }
 }
 
-async function manejarInscripcionFeriaEjemplar(req, res) {
+async function manejarInscripcionFeriaEjemplarDatos(req, res) {
   if (!estaAutorizado(req)) {
     res.writeHead(401, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, error: "no autorizado" }));
     return;
@@ -126,10 +128,62 @@ async function manejarInscripcionFeriaEjemplar(req, res) {
   }
 
   try {
-    const resultado = await registrarEjemplarFeria(datos);
+    const resultado = await registrarEjemplarDatos(datos);
     res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, ...resultado }));
   } catch (err) {
     console.error("Error registrando ejemplar de feria:", err);
+    const status = err.status || 500;
+    res
+      .writeHead(status, { "Content-Type": "application/json" })
+      .end(JSON.stringify({ ok: false, error: status === 400 ? err.message : "error interno" }));
+  }
+}
+
+async function manejarInscripcionFeriaMontador(req, res) {
+  if (!estaAutorizado(req)) {
+    res.writeHead(401, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, error: "no autorizado" }));
+    return;
+  }
+
+  let datos;
+  try {
+    datos = await leerCuerpoJSON(req);
+  } catch (err) {
+    res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, error: "cuerpo no es JSON válido" }));
+    return;
+  }
+
+  try {
+    const resultado = await registrarMontador(datos);
+    res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, ...resultado }));
+  } catch (err) {
+    console.error("Error registrando montador de feria:", err);
+    const status = err.status || 500;
+    res
+      .writeHead(status, { "Content-Type": "application/json" })
+      .end(JSON.stringify({ ok: false, error: status === 400 ? err.message : "error interno" }));
+  }
+}
+
+async function manejarInscripcionFeriaPalafrenero(req, res) {
+  if (!estaAutorizado(req)) {
+    res.writeHead(401, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, error: "no autorizado" }));
+    return;
+  }
+
+  let datos;
+  try {
+    datos = await leerCuerpoJSON(req);
+  } catch (err) {
+    res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, error: "cuerpo no es JSON válido" }));
+    return;
+  }
+
+  try {
+    const resultado = await registrarPalafrenero(datos);
+    res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, ...resultado }));
+  } catch (err) {
+    console.error("Error registrando palafrenero de feria:", err);
     const status = err.status || 500;
     res
       .writeHead(status, { "Content-Type": "application/json" })
@@ -237,8 +291,18 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  if (req.method === "POST" && req.url === "/inscripcion-feria-ejemplar") {
-    manejarInscripcionFeriaEjemplar(req, res);
+  if (req.method === "POST" && req.url === "/inscripcion-feria-ejemplar-datos") {
+    manejarInscripcionFeriaEjemplarDatos(req, res);
+    return;
+  }
+
+  if (req.method === "POST" && req.url === "/inscripcion-feria-montador") {
+    manejarInscripcionFeriaMontador(req, res);
+    return;
+  }
+
+  if (req.method === "POST" && req.url === "/inscripcion-feria-palafrenero") {
+    manejarInscripcionFeriaPalafrenero(req, res);
     return;
   }
 

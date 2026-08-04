@@ -1,17 +1,23 @@
-// Organiza el texto libre de un ejemplar + montador + palafrenero (feria)
-// usando Claude, en dos pasos:
-//   1) extraer los datos + adivinar la Modalidad (siempre son las mismas 5
-//      opciones fijas del reglamento, así que se puede restringir de una).
-//   2) con la Modalidad ya resuelta, elegir la Categoría real — esta sí
-//      depende del Sexo y de la Modalidad, así que se lee la lista real desde
-//      el Sheet en el momento y se le pide a Claude que elija SOLO entre esas,
-//      nunca que invente una.
+// Extracción de datos de la Feria — separada por bloque (ejemplar / montador
+// / palafrenero / propietario), porque cada bloque se guarda apenas se
+// completa, no se espera a tenerlos todos para recién ahí guardar algo.
 const Anthropic = require("@anthropic-ai/sdk");
 const { MODALIDADES_VALIDAS, obtenerCategoriasReales } = require("./sheetsFeria");
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-const ESQUEMA_EXTRACCION = {
+// Cuando ya hay datos confirmados de un intento anterior (un reintento corto
+// que solo trae el dato que faltaba), se le dice a Claude cuáles ya quedaron
+// resueltos y cuáles siguen pendientes — si no, un texto corto puede
+// asignarse al campo equivocado y pisar por error un dato que ya estaba bien.
+function contextoConfirmado(yaConfirmado) {
+  return yaConfirmado && Object.values(yaConfirmado).some((v) => v)
+    ? `\nOJO: esta persona ya había dado antes estos datos, que quedaron CONFIRMADOS y no debes cambiar ni reinventar — solo repítelos tal cual si el texto nuevo no dice lo contrario:\n${JSON.stringify(yaConfirmado)}\n` +
+      `El texto nuevo probablemente solo trae el dato (o los datos) que todavía faltaban — asígnalo al campo vacío que mejor le corresponda, no lo pongas en un campo que ya estaba confirmado.\n`
+    : "";
+}
+
+const ESQUEMA_EJEMPLAR = {
   type: "object",
   properties: {
     nombreEjemplar: { type: "string" },
@@ -20,42 +26,22 @@ const ESQUEMA_EXTRACCION = {
     sexo: { type: "string", enum: ["HEMBRA", "MACHO"], description: "Sexo del ejemplar, según lo que la persona haya escrito" },
     modalidad: { type: "string", enum: MODALIDADES_VALIDAS, description: "El \"Andar\" del ejemplar, elegido de la lista real del reglamento" },
     categoriaTexto: { type: "string", description: "Lo que la persona escribió sobre la edad/categoría, tal cual (ej. \"3 años\", \"potro joven\") — no lo conviertas todavía" },
-    nombreMontador: { type: "string" },
-    documentoMontador: { type: "string" },
-    telefonoMontador: { type: "string" },
-    nombrePalafrenero: { type: "string" },
-    telefonoPalafrenero: { type: "string" },
   },
-  required: [
-    "nombreEjemplar", "registro", "criaderoDondePasta", "sexo", "modalidad", "categoriaTexto",
-    "nombreMontador", "documentoMontador", "telefonoMontador", "nombrePalafrenero", "telefonoPalafrenero",
-  ],
+  required: ["nombreEjemplar", "registro", "criaderoDondePasta", "sexo", "modalidad", "categoriaTexto"],
   additionalProperties: false,
 };
 
-async function extraerEjemplarMontador(datosEjemplarTexto, datosMontadorTexto, datosPalafreneroTexto, yaConfirmado) {
-  // Cuando ya hay datos confirmados de un intento anterior (un reintento
-  // corto que solo trae el dato que faltaba), se le dice a Claude cuáles ya
-  // quedaron resueltos y cuáles siguen pendientes — si no, con un texto tan
-  // corto como "San Antonio" puede asignarlo al campo equivocado (¿nombre
-  // del ejemplar o criadero?) y pisar por error un dato que ya estaba bien.
-  const contexto = yaConfirmado && Object.values(yaConfirmado).some((v) => v)
-    ? `\nOJO: esta persona ya había dado antes estos datos, que quedaron CONFIRMADOS y no debes cambiar ni reinventar — solo repítelos tal cual si el texto nuevo no dice lo contrario:\n${JSON.stringify(yaConfirmado)}\n` +
-      `El texto nuevo probablemente solo trae el dato (o los datos) que todavía faltaban — asígnalo al campo vacío que mejor le corresponda, no lo pongas en un campo que ya estaba confirmado.\n`
-    : "";
-
+async function extraerEjemplar(datosEjemplarTexto, yaConfirmado) {
   const mensaje = await client.messages.create({
     model: "claude-opus-5",
-    max_tokens: 1024,
-    output_config: { effort: "low", format: { type: "json_schema", schema: ESQUEMA_EXTRACCION } },
+    max_tokens: 512,
+    output_config: { effort: "low", format: { type: "json_schema", schema: ESQUEMA_EJEMPLAR } },
     messages: [
       {
         role: "user",
         content:
           `Datos de un ejemplar (caballo) para una exposición equina, escritos en texto libre:\n"""${datosEjemplarTexto}"""\n\n` +
-          `Datos del montador de ese ejemplar:\n"""${datosMontadorTexto}"""\n\n` +
-          `Datos del palafrenero de ese ejemplar:\n"""${datosPalafreneroTexto}"""\n\n` +
-          contexto +
+          contextoConfirmado(yaConfirmado) +
           `Extrae cada dato. Para "sexo", identifica si el ejemplar es Hembra o Macho según lo que escribió la persona. ` +
           `Para "modalidad", elige la opción de la lista que mejor corresponda a lo que la persona describió ` +
           `(por ejemplo si menciona "paso fino" corresponde a "Paso Fino P4"; si menciona burros o mulas corresponde a ` +
@@ -64,7 +50,7 @@ async function extraerEjemplarMontador(datosEjemplarTexto, datosMontadorTexto, d
       },
     ],
   });
-  if (mensaje.stop_reason === "refusal") throw new Error("Claude no pudo procesar el texto (refusal).");
+  if (mensaje.stop_reason === "refusal") throw new Error("Claude no pudo procesar el texto del ejemplar (refusal).");
   const bloque = mensaje.content.find((b) => b.type === "text");
   if (!bloque) throw new Error("Claude no devolvió los datos del ejemplar.");
   return JSON.parse(bloque.text);
@@ -102,18 +88,68 @@ async function elegirCategoriaReal(categoriaTexto, categoriasReales) {
   return JSON.parse(bloque.text).categoria;
 }
 
-async function organizarEjemplarCompleto(datosEjemplarTexto, datosMontadorTexto, datosPalafreneroTexto) {
-  const extraido = await extraerEjemplarMontador(datosEjemplarTexto, datosMontadorTexto, datosPalafreneroTexto);
-  const categoriasReales = await obtenerCategoriasReales(extraido.modalidad, extraido.sexo);
-  const categoria = await elegirCategoriaReal(extraido.categoriaTexto, categoriasReales);
-  return { ...extraido, categoria };
+const ESQUEMA_MONTADOR = {
+  type: "object",
+  properties: {
+    nombreMontador: { type: "string" },
+    documentoMontador: { type: "string" },
+    telefonoMontador: { type: "string" },
+  },
+  required: ["nombreMontador", "documentoMontador", "telefonoMontador"],
+  additionalProperties: false,
+};
+
+async function extraerMontador(datosMontadorTexto, yaConfirmado) {
+  const mensaje = await client.messages.create({
+    model: "claude-opus-5",
+    max_tokens: 512,
+    output_config: { effort: "low", format: { type: "json_schema", schema: ESQUEMA_MONTADOR } },
+    messages: [
+      {
+        role: "user",
+        content:
+          `Datos del montador de un ejemplar para una exposición equina, en texto libre:\n"""${datosMontadorTexto}"""\n\n` +
+          contextoConfirmado(yaConfirmado) +
+          `Extrae nombre, documento y teléfono. Si algún dato no aparece, deja el campo como cadena vacía — no inventes nada.`,
+      },
+    ],
+  });
+  if (mensaje.stop_reason === "refusal") throw new Error("Claude no pudo procesar el texto del montador (refusal).");
+  const bloque = mensaje.content.find((b) => b.type === "text");
+  if (!bloque) throw new Error("Claude no devolvió los datos del montador.");
+  return JSON.parse(bloque.text);
 }
 
-// obtenerCategoriasReales se re-exporta porque, cuando hay un borrador con
-// Sexo/Modalidad ya resueltos de un intento anterior (y el reintento es un
-// texto corto que no los menciona), se necesita volver a llamarla con los
-// valores del borrador en vez de los recién adivinados.
+const ESQUEMA_PALAFRENERO = {
+  type: "object",
+  properties: {
+    nombrePalafrenero: { type: "string" },
+    telefonoPalafrenero: { type: "string" },
+  },
+  required: ["nombrePalafrenero", "telefonoPalafrenero"],
+  additionalProperties: false,
+};
 
+async function extraerPalafrenero(datosPalafreneroTexto, yaConfirmado) {
+  const mensaje = await client.messages.create({
+    model: "claude-opus-5",
+    max_tokens: 512,
+    output_config: { effort: "low", format: { type: "json_schema", schema: ESQUEMA_PALAFRENERO } },
+    messages: [
+      {
+        role: "user",
+        content:
+          `Datos del palafrenero de un ejemplar para una exposición equina, en texto libre:\n"""${datosPalafreneroTexto}"""\n\n` +
+          contextoConfirmado(yaConfirmado) +
+          `Extrae nombre y teléfono. Si algún dato no aparece, deja el campo como cadena vacía — no inventes nada.`,
+      },
+    ],
+  });
+  if (mensaje.stop_reason === "refusal") throw new Error("Claude no pudo procesar el texto del palafrenero (refusal).");
+  const bloque = mensaje.content.find((b) => b.type === "text");
+  if (!bloque) throw new Error("Claude no devolvió los datos del palafrenero.");
+  return JSON.parse(bloque.text);
+}
 
 const ESQUEMA_PROPIETARIO = {
   type: "object",
@@ -129,11 +165,6 @@ const ESQUEMA_PROPIETARIO = {
 };
 
 async function organizarPropietario(datosPropietarioTexto, yaConfirmado) {
-  const contexto = yaConfirmado && Object.values(yaConfirmado).some((v) => v)
-    ? `\nOJO: esta persona ya había dado antes estos datos, que quedaron CONFIRMADOS y no debes cambiar ni reinventar — solo repítelos tal cual si el texto nuevo no dice lo contrario:\n${JSON.stringify(yaConfirmado)}\n` +
-      `El texto nuevo probablemente solo trae el dato (o los datos) que todavía faltaban — asígnalo al campo vacío que mejor le corresponda, no lo pongas en un campo que ya estaba confirmado.\n`
-    : "";
-
   const mensaje = await client.messages.create({
     model: "claude-opus-5",
     max_tokens: 512,
@@ -143,7 +174,7 @@ async function organizarPropietario(datosPropietarioTexto, yaConfirmado) {
         role: "user",
         content:
           `Datos de el propietario/criadero de un ejemplar para una exposición equina, en texto libre:\n"""${datosPropietarioTexto}"""\n\n` +
-          contexto +
+          contextoConfirmado(yaConfirmado) +
           `Extrae cada dato: nombre completo o razón social, tipo y número de documento, teléfono, correo electrónico y municipio. ` +
           `Si algún dato no aparece, deja el campo como cadena vacía — no inventes nada.`,
       },
@@ -156,9 +187,10 @@ async function organizarPropietario(datosPropietarioTexto, yaConfirmado) {
 }
 
 module.exports = {
-  organizarEjemplarCompleto,
-  organizarPropietario,
-  extraerEjemplarMontador,
+  extraerEjemplar,
+  extraerMontador,
+  extraerPalafrenero,
   obtenerCategoriasReales,
   elegirCategoriaReal,
+  organizarPropietario,
 };

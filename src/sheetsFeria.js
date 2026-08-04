@@ -87,17 +87,25 @@ async function obtenerCategoriasReales(modalidad, sexo) {
   return [...new Set(categorias)];
 }
 
+function bloquePorSexo(sexo) {
+  const bloque = BLOQUES.find((b) => b.sexo === sexo.toUpperCase());
+  if (!bloque) throw new Error(`Sexo no reconocido: ${sexo}`);
+  return bloque;
+}
+
 // Busca el bloque exacto (por Sexo + Modalidad + Categoría) y dentro de él la
-// primera fila vacía. Devuelve null si el bloque está lleno (las 11 filas ya
-// tienen ejemplar) o si no encuentra el bloque.
-async function escribirEjemplar({ modalidad, sexo, categoria, nombreEjemplar, registro, criaderoDondePasta, nombreMontador, nombrePalafrenero, telefonoPalafrenero }) {
+// primera fila vacía — escribe solo Nombre/Registro/Criadero (el montador y
+// el palafrenero llegan después, cada uno en su propio bloque, y completan
+// esta misma fila con completarMontador/completarPalafrenero). Devuelve
+// "cupo_lleno" si las 11 filas ya tienen ejemplar, o "bloque_no_encontrado"
+// si no encuentra la combinación Sexo+Modalidad+Categoría.
+async function escribirEjemplar({ modalidad, sexo, categoria, nombreEjemplar, registro, criaderoDondePasta }) {
   const pestana = MODALIDAD_A_PESTANA[modalidad];
   if (!pestana) throw new Error(`Modalidad no reconocida: ${modalidad}`);
   const sheetId = process.env.FERIA_SHEET_ID;
   if (!sheetId) throw new Error("Falta FERIA_SHEET_ID en las variables de entorno.");
 
-  const bloque = BLOQUES.find((b) => b.sexo === sexo.toUpperCase());
-  if (!bloque) throw new Error(`Sexo no reconocido: ${sexo}`);
+  const bloque = bloquePorSexo(sexo);
   const inicioCol = letraAColumna(bloque.inicio);
   const finCol = columnaALetra(inicioCol + 9);
   const rango = `'${pestana}'!${bloque.inicio}1:${finCol}2000`;
@@ -136,9 +144,6 @@ async function escribirEjemplar({ modalidad, sexo, categoria, nombreEjemplar, re
   const colNombre = columnaALetra(inicioCol + 1);
   const colRegistro = columnaALetra(inicioCol + 2);
   const colCriadero = columnaALetra(inicioCol + 6);
-  const colMontador = columnaALetra(inicioCol + 7);
-  const colPalafrenero = columnaALetra(inicioCol + 8);
-  const colTelefonoPalafrenero = columnaALetra(inicioCol + 9);
 
   // Rangos separados a propósito — nunca tocan D:F (Sexo/Andar/Categoría).
   // Esas tres columnas solo vienen escritas en la PRIMERA fila de cada bloque
@@ -150,12 +155,52 @@ async function escribirEjemplar({ modalidad, sexo, categoria, nombreEjemplar, re
       valueInputOption: "RAW",
       data: [
         { range: `'${pestana}'!${colNombre}${filaReal}:${colRegistro}${filaReal}`, values: [[nombreEjemplar, registro]] },
-        { range: `'${pestana}'!${colCriadero}${filaReal}:${colTelefonoPalafrenero}${filaReal}`, values: [[criaderoDondePasta, nombreMontador, nombrePalafrenero, telefonoPalafrenero]] },
+        { range: `'${pestana}'!${colCriadero}${filaReal}`, values: [[criaderoDondePasta]] },
       ],
     },
   });
 
   return { escrito: true, pestana, fila: filaReal, numeroEnBloque: filaLibre - filaInicioBloque + 1 };
+}
+
+// Completa la columna del montador en la fila que ya dejó lista el ejemplar.
+async function completarMontador({ pestana, fila, sexo, nombreMontador }) {
+  const sheetId = process.env.FERIA_SHEET_ID;
+  if (!sheetId) throw new Error("Falta FERIA_SHEET_ID en las variables de entorno.");
+  const inicioCol = letraAColumna(bloquePorSexo(sexo).inicio);
+  const colMontador = columnaALetra(inicioCol + 7);
+
+  const authClient = auth();
+  const sheets = google.sheets({ version: "v4", auth: authClient });
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: sheetId,
+    range: `'${pestana}'!${colMontador}${fila}`,
+    valueInputOption: "RAW",
+    requestBody: { values: [[nombreMontador]] },
+  });
+
+  return { escrito: true, pestana, fila };
+}
+
+// Completa las columnas del palafrenero en la fila que ya dejó lista el
+// ejemplar — es el último bloque, así que esta fila queda completa.
+async function completarPalafrenero({ pestana, fila, sexo, nombrePalafrenero, telefonoPalafrenero }) {
+  const sheetId = process.env.FERIA_SHEET_ID;
+  if (!sheetId) throw new Error("Falta FERIA_SHEET_ID en las variables de entorno.");
+  const inicioCol = letraAColumna(bloquePorSexo(sexo).inicio);
+  const colPalafrenero = columnaALetra(inicioCol + 8);
+  const colTelefonoPalafrenero = columnaALetra(inicioCol + 9);
+
+  const authClient = auth();
+  const sheets = google.sheets({ version: "v4", auth: authClient });
+  await sheets.spreadsheets.values.update({
+    spreadsheetId: sheetId,
+    range: `'${pestana}'!${colPalafrenero}${fila}:${colTelefonoPalafrenero}${fila}`,
+    valueInputOption: "RAW",
+    requestBody: { values: [[nombrePalafrenero, telefonoPalafrenero]] },
+  });
+
+  return { escrito: true, pestana, fila };
 }
 
 // "Información general" es distinta a las demás: una fila por PROPIETARIO
@@ -226,4 +271,12 @@ async function escribirEjemplarGeneral({ fila, numeroEjemplar, nombreEjemplar, r
   return { escrito: true, fila };
 }
 
-module.exports = { obtenerCategoriasReales, escribirEjemplar, escribirPropietarioGeneral, escribirEjemplarGeneral, MODALIDADES_VALIDAS };
+module.exports = {
+  obtenerCategoriasReales,
+  escribirEjemplar,
+  completarMontador,
+  completarPalafrenero,
+  escribirPropietarioGeneral,
+  escribirEjemplarGeneral,
+  MODALIDADES_VALIDAS,
+};
