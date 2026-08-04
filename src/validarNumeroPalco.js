@@ -16,10 +16,10 @@ function listarConY(numeros) {
 }
 
 async function validarNumeroPalco(datos = {}) {
-  const { tipoPalcoTexto = "", numeroPalcoTexto = "" } = datos;
+  const { tipoPalcoTexto = "", numeroPalcoCompletoTexto = "", numeroPalcoSillasTexto = "" } = datos;
 
-  if (!tipoPalcoTexto || !numeroPalcoTexto) {
-    const error = new Error("Faltan campos obligatorios: tipoPalcoTexto y numeroPalcoTexto.");
+  if (!tipoPalcoTexto) {
+    const error = new Error("Falta el campo obligatorio: tipoPalcoTexto.");
     error.status = 400;
     throw error;
   }
@@ -29,6 +29,11 @@ async function validarNumeroPalco(datos = {}) {
     return { ok: B(false), mensajeError: 'No entendí qué tipo de palco eligió — responda "Palco completo" o "Por días".' };
   }
 
+  // Lucid guarda el número en un campo distinto según la ruta que tomó la
+  // persona (Numero palco completo / Numero palco por silla) — no hay un
+  // único campo genérico, así que aquí se recibe los dos y se usa solo el
+  // que corresponde al tipo, igual que ya hace /reserva-palco.
+  const numeroPalcoTexto = tipoPalco === "SILLAS" ? numeroPalcoSillasTexto : numeroPalcoCompletoTexto;
   const numero = extraerNumeroPalco(numeroPalcoTexto);
   if (!numero) {
     return { ok: B(false), mensajeError: "No entendí el número de palco — indíquelo de nuevo (ej. 14)." };
