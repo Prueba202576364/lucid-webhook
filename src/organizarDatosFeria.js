@@ -17,14 +17,20 @@ function contextoConfirmado(yaConfirmado) {
     : "";
 }
 
+const NO_MENCIONADO = "NO_MENCIONADO";
+
+// Sexo y Modalidad son de lista cerrada — sin un valor tipo "no lo dijo",
+// Claude está obligado a elegir una opción real aunque el texto no la
+// mencione en absoluto (adivinando en silencio). Agregar NO_MENCIONADO como
+// opción válida le da una salida honesta en vez de forzarlo a inventar.
 const ESQUEMA_EJEMPLAR = {
   type: "object",
   properties: {
     nombreEjemplar: { type: "string" },
     registro: { type: "string", description: "Número de registro del ejemplar" },
     criaderoDondePasta: { type: "string" },
-    sexo: { type: "string", enum: ["HEMBRA", "MACHO"], description: "Sexo del ejemplar, según lo que la persona haya escrito" },
-    modalidad: { type: "string", enum: MODALIDADES_VALIDAS, description: "El \"Andar\" del ejemplar, elegido de la lista real del reglamento" },
+    sexo: { type: "string", enum: ["HEMBRA", "MACHO", NO_MENCIONADO], description: "Sexo del ejemplar, según lo que la persona haya escrito" },
+    modalidad: { type: "string", enum: [...MODALIDADES_VALIDAS, NO_MENCIONADO], description: "El \"Andar\" del ejemplar, elegido de la lista real del reglamento" },
     categoriaTexto: { type: "string", description: "Lo que la persona escribió sobre la edad/categoría, tal cual (ej. \"3 años\", \"potro joven\") — no lo conviertas todavía" },
   },
   required: ["nombreEjemplar", "registro", "criaderoDondePasta", "sexo", "modalidad", "categoriaTexto"],
@@ -42,11 +48,14 @@ async function extraerEjemplar(datosEjemplarTexto, yaConfirmado) {
         content:
           `Datos de un ejemplar (caballo) para una exposición equina, escritos en texto libre:\n"""${datosEjemplarTexto}"""\n\n` +
           contextoConfirmado(yaConfirmado) +
-          `Extrae cada dato. Para "sexo", identifica si el ejemplar es Hembra o Macho según lo que escribió la persona. ` +
-          `Para "modalidad", elige la opción de la lista que mejor corresponda a lo que la persona describió ` +
-          `(por ejemplo si menciona "paso fino" corresponde a "Paso Fino P4"; si menciona burros o mulas corresponde a ` +
-          `"Sin Paso (Asnales-Mulares)"). Para "categoriaTexto" copia tal cual lo que la persona escribió sobre edad o categoría, ` +
-          `sin intentar convertirlo todavía. Si algún dato no aparece, deja el campo como cadena vacía — no inventes nada.`,
+          `Extrae cada dato. Para "sexo", identifica si el ejemplar es Hembra o Macho según lo que escribió la persona — ` +
+          `si el texto NO menciona el sexo en absoluto (ni Hembra, ni Macho, ni ninguna palabra relacionada), usa exactamente ` +
+          `"${NO_MENCIONADO}" en vez de adivinar. Para "modalidad", elige la opción de la lista que mejor corresponda a lo que ` +
+          `la persona describió (por ejemplo si menciona "paso fino" corresponde a "Paso Fino P4"; si menciona burros o mulas ` +
+          `corresponde a "Sin Paso (Asnales-Mulares)") — si el texto NO menciona ningún andar/modalidad en absoluto, usa ` +
+          `exactamente "${NO_MENCIONADO}" en vez de adivinar. Para "categoriaTexto" copia tal cual lo que la persona escribió ` +
+          `sobre edad o categoría, sin intentar convertirlo todavía. Si algún otro dato no aparece, deja el campo como cadena ` +
+          `vacía — no inventes nada.`,
       },
     ],
   });
@@ -193,4 +202,5 @@ module.exports = {
   obtenerCategoriasReales,
   elegirCategoriaReal,
   organizarPropietario,
+  NO_MENCIONADO,
 };

@@ -5,7 +5,7 @@
 // registro (ver inscripcionFeriaMontador.js / inscripcionFeriaPalafrenero.js).
 const { collection, addDoc, updateDoc } = require("firebase/firestore");
 const { db } = require("./firebaseClient");
-const { extraerEjemplar, obtenerCategoriasReales, elegirCategoriaReal } = require("./organizarDatosFeria");
+const { extraerEjemplar, obtenerCategoriasReales, elegirCategoriaReal, NO_MENCIONADO } = require("./organizarDatosFeria");
 const { escribirEjemplar } = require("./sheetsFeria");
 const { generarLoteId, loteIdValido } = require("./loteId");
 const { obtenerSeccion, guardarSeccion, limpiarSeccion, resolverBloque } = require("./borradores");
@@ -35,22 +35,30 @@ async function registrarEjemplarDatos(datos = {}) {
   const anterior = await obtenerSeccion(COLECCION_BORRADORES, loteIdFinal, "ejemplarActual");
   const nuevo = await extraerEjemplar(datosEjemplarTexto, anterior);
 
-  // Sexo/Modalidad/Categoría son de lista cerrada — Claude está OBLIGADO a
-  // devolver algo aunque el reintento sea un texto corto que no los
-  // menciona. Por eso, si ya se habían resuelto antes, se conservan tal
-  // cual en vez de dejar que un reintento parcial los adivine de nuevo.
-  const sexo = (anterior && anterior.sexo) || nuevo.sexo;
-  const modalidad = (anterior && anterior.modalidad) || nuevo.modalidad;
+  // Sexo/Modalidad son de lista cerrada — sin la opción NO_MENCIONADO,
+  // Claude estaría obligado a adivinar aunque el texto no los mencione en
+  // absoluto. Si ya se habían resuelto de verdad antes (no NO_MENCIONADO),
+  // se conservan tal cual en vez de dejar que un reintento parcial los
+  // adivine de nuevo.
+  const anteriorSexoValido = anterior && anterior.sexo && anterior.sexo !== NO_MENCIONADO ? anterior.sexo : null;
+  const anteriorModalidadValida = anterior && anterior.modalidad && anterior.modalidad !== NO_MENCIONADO ? anterior.modalidad : null;
+  const sexo = anteriorSexoValido || nuevo.sexo;
+  const modalidad = anteriorModalidadValida || nuevo.modalidad;
   const categoriaTexto = (anterior && anterior.categoriaTexto) || nuevo.categoriaTexto;
 
   const res = resolverBloque(SPEC_EJEMPLAR, nuevo, anterior);
 
-  if (!res.valido) {
+  const problemasExtra = [];
+  if (sexo === NO_MENCIONADO) problemasExtra.push("sexo (no lo mencionó)");
+  if (modalidad === NO_MENCIONADO) problemasExtra.push("modalidad/andar (no lo mencionó)");
+  if (!categoriaTexto || !categoriaTexto.toString().trim()) problemasExtra.push("categoría o edad (no la mencionó)");
+
+  if (!res.valido || problemasExtra.length > 0) {
     await guardarSeccion(COLECCION_BORRADORES, loteIdFinal, "ejemplarActual", { ...res.paraGuardar, sexo, modalidad, categoriaTexto });
     return {
       ok: B(false),
       loteId: loteIdFinal,
-      mensajeErrorEjemplar: `Todavía falta: ${res.problemas.join(", ")}.`,
+      mensajeErrorEjemplar: `Todavía falta: ${[...res.problemas, ...problemasExtra].join(", ")}.`,
     };
   }
 
