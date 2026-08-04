@@ -58,12 +58,14 @@ function validarCorreo(v) {
   return { valido: true, valor: val };
 }
 
-// Municipio: no vacío, solo letras/espacios/tildes — no se compara contra
-// un listado real de municipios de Colombia (se deja para más adelante).
+// Municipio: no vacío, solo letras/espacios/tildes/coma — se permite la coma
+// porque Claude suele normalizar "ciudad depto" como "Ciudad, Depto" aunque
+// la persona no la haya escrito así. No se compara contra un listado real
+// de municipios de Colombia (se deja para más adelante si hace falta).
 function validarMunicipio(v) {
   const val = limpiar(v);
   if (!val) return { valido: false, motivo: "no puede estar vacío" };
-  if (!/^[a-zA-ZÀ-ÿ\s.]+$/.test(val)) {
+  if (!/^[a-zA-ZÀ-ÿ\s.,]+$/.test(val)) {
     return { valido: false, motivo: "no parece un nombre de municipio válido" };
   }
   return { valido: true, valor: val };
