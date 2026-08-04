@@ -17,6 +17,7 @@ const { registrarPalafrenero } = require("./src/inscripcionFeriaPalafrenero");
 const { registrarPropietarioFeria } = require("./src/inscripcionFeriaPropietario");
 const { registrarReservaPalco } = require("./src/inscripcionReserva");
 const { registrarReservaCliente } = require("./src/inscripcionReservaCliente");
+const { validarNumeroPalco } = require("./src/validarNumeroPalco");
 
 const PORT = process.env.PORT || 3000;
 const TOKEN = process.env.LUCID_WEBHOOK_TOKEN;
@@ -270,6 +271,32 @@ async function manejarReservaPalcoCliente(req, res) {
   }
 }
 
+async function manejarValidarNumeroPalco(req, res) {
+  if (!estaAutorizado(req)) {
+    res.writeHead(401, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, error: "no autorizado" }));
+    return;
+  }
+
+  let datos;
+  try {
+    datos = await leerCuerpoJSON(req);
+  } catch (err) {
+    res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, error: "cuerpo no es JSON válido" }));
+    return;
+  }
+
+  try {
+    const resultado = await validarNumeroPalco(datos);
+    res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, ...resultado }));
+  } catch (err) {
+    console.error("Error validando número de palco:", err);
+    const status = err.status || 500;
+    res
+      .writeHead(status, { "Content-Type": "application/json" })
+      .end(JSON.stringify({ ok: false, error: status === 400 ? err.message : "error interno" }));
+  }
+}
+
 async function manejarReservaPalco(req, res) {
   if (!estaAutorizado(req)) {
     res.writeHead(401, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, error: "no autorizado" }));
@@ -340,6 +367,11 @@ const server = http.createServer((req, res) => {
 
   if (req.method === "POST" && req.url === "/comprobante-cabalgata") {
     manejarComprobanteCabalgata(req, res);
+    return;
+  }
+
+  if (req.method === "POST" && req.url === "/validar-numero-palco") {
+    manejarValidarNumeroPalco(req, res);
     return;
   }
 
