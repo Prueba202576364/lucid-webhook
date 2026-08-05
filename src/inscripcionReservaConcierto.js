@@ -11,9 +11,18 @@ const { extraerCategoria } = require("./organizarDatosConcierto");
 const { extraerNumeroPalco } = require("./organizarDatosReserva");
 const { obtenerSeccion, limpiarSeccion } = require("./borradoresConcierto");
 const { fechaColombia } = require("./fecha");
+const { agregarFila } = require("./sheets");
 
 const COLECCION_BORRADORES = "reservaConciertoBorradores";
 const B = (v) => (v ? "true" : "false");
+
+const TITULO_SHEET_CONCIERTO = "Reservas concierto";
+const NOMBRE_HOJA_CONCIERTO = "Hoja 1";
+const ENCABEZADOS_CONCIERTO = [
+  "Fecha inscripcion", "nombre completo", "cedula", "telefono", "correo electronico",
+  "Patrocinadores", "Diamante", "Oro", "Plata", "valor pagado por palco",
+  "valor total", "medio d pago", "comprobante de pago",
+];
 
 function respuestaError({ loteId, errorCliente = false, errorSeleccion = false, mensajeErrorCliente = "", mensajeErrorSeleccion = "" }) {
   return {
@@ -132,6 +141,39 @@ async function registrarReservaConcierto(datos = {}) {
   const pagoRef = await dbConcierto.collection("pagosPendientes").add(pagoPendiente);
 
   await limpiarSeccion(COLECCION_BORRADORES, loteIdFinal, "clienteConfirmado");
+
+  // Firestore ya quedó guardado (fuente de verdad). El Sheet es un espejo
+  // best-effort — si falla, no se pierde la reserva, solo se le avisa al
+  // log para que alguien lo revise a mano. El número del palco va en la
+  // columna de su propia categoría, dejando las otras tres en blanco.
+  try {
+    const columnasCategorias = { patrocinadores: "", diamante: "", oro: "", plata: "" };
+    columnasCategorias[categoria] = numero;
+
+    await agregarFila(
+      TITULO_SHEET_CONCIERTO,
+      NOMBRE_HOJA_CONCIERTO,
+      ENCABEZADOS_CONCIERTO,
+      [
+        fecha,
+        nombreCompleto,
+        cedula,
+        telefono,
+        correo,
+        columnasCategorias.patrocinadores,
+        columnasCategorias.diamante,
+        columnasCategorias.oro,
+        columnasCategorias.plata,
+        monto,
+        monto,
+        "",
+        comprobantePago,
+      ],
+      process.env.CONCIERTO_SHEET_ID
+    );
+  } catch (err) {
+    console.error(`Error escribiendo la reserva del concierto ${reservaRef.id} en el Sheet (sí quedó en Firestore):`, err);
+  }
 
   const resumen =
     `Responsable: ${nombreCompleto}\nCédula: ${cedula}\nTeléfono: ${telefono}\n` +
