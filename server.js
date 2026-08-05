@@ -8,6 +8,7 @@ try {
 }
 const http = require("http");
 const { obtenerDisponibilidad } = require("./src/disponibilidad");
+const { obtenerDisponibilidadConcierto } = require("./src/disponibilidadConcierto");
 const { registrarJineteCabalgata } = require("./src/inscripcionCabalgataJinete");
 const { registrarEquinoCabalgata } = require("./src/inscripcionCabalgataEquino");
 const { registrarComprobanteCabalgata } = require("./src/comprobanteCabalgata");
@@ -59,6 +60,21 @@ async function manejarDisponibilidad(req, res) {
     res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify(datos));
   } catch (err) {
     console.error("Error consultando disponibilidad:", err);
+    res.writeHead(500, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, error: "error interno" }));
+  }
+}
+
+async function manejarDisponibilidadConcierto(req, res) {
+  if (!estaAutorizado(req)) {
+    res.writeHead(401, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, error: "no autorizado" }));
+    return;
+  }
+
+  try {
+    const datos = await obtenerDisponibilidadConcierto();
+    res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify(datos));
+  } catch (err) {
+    console.error("Error consultando disponibilidad del concierto:", err);
     res.writeHead(500, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, error: "error interno" }));
   }
 }
@@ -332,6 +348,11 @@ const server = http.createServer((req, res) => {
 
   if ((req.method === "GET" || req.method === "POST") && req.url === "/disponibilidad") {
     manejarDisponibilidad(req, res);
+    return;
+  }
+
+  if ((req.method === "GET" || req.method === "POST") && req.url === "/disponibilidad-concierto") {
+    manejarDisponibilidadConcierto(req, res);
     return;
   }
 
