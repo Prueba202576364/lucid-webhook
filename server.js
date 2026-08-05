@@ -19,6 +19,9 @@ const { registrarPropietarioFeria } = require("./src/inscripcionFeriaPropietario
 const { registrarReservaPalco } = require("./src/inscripcionReserva");
 const { registrarReservaCliente } = require("./src/inscripcionReservaCliente");
 const { validarNumeroPalco } = require("./src/validarNumeroPalco");
+const { registrarReservaConciertoCliente } = require("./src/inscripcionReservaConciertoCliente");
+const { validarPalcoConcierto } = require("./src/validarPalcoConcierto");
+const { registrarReservaConcierto } = require("./src/inscripcionReservaConcierto");
 
 const PORT = process.env.PORT || 3000;
 const TOKEN = process.env.LUCID_WEBHOOK_TOKEN;
@@ -313,6 +316,84 @@ async function manejarValidarNumeroPalco(req, res) {
   }
 }
 
+async function manejarReservaConciertoCliente(req, res) {
+  if (!estaAutorizado(req)) {
+    res.writeHead(401, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, error: "no autorizado" }));
+    return;
+  }
+
+  let datos;
+  try {
+    datos = await leerCuerpoJSON(req);
+  } catch (err) {
+    res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, error: "cuerpo no es JSON válido" }));
+    return;
+  }
+
+  try {
+    const resultado = await registrarReservaConciertoCliente(datos);
+    res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, ...resultado }));
+  } catch (err) {
+    console.error("Error registrando cliente de reserva del concierto:", err);
+    const status = err.status || 500;
+    res
+      .writeHead(status, { "Content-Type": "application/json" })
+      .end(JSON.stringify({ ok: false, error: status === 400 ? err.message : "error interno" }));
+  }
+}
+
+async function manejarValidarPalcoConcierto(req, res) {
+  if (!estaAutorizado(req)) {
+    res.writeHead(401, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, error: "no autorizado" }));
+    return;
+  }
+
+  let datos;
+  try {
+    datos = await leerCuerpoJSON(req);
+  } catch (err) {
+    res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, error: "cuerpo no es JSON válido" }));
+    return;
+  }
+
+  try {
+    const resultado = await validarPalcoConcierto(datos);
+    res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, ...resultado }));
+  } catch (err) {
+    console.error("Error validando palco del concierto:", err);
+    const status = err.status || 500;
+    res
+      .writeHead(status, { "Content-Type": "application/json" })
+      .end(JSON.stringify({ ok: false, error: status === 400 ? err.message : "error interno" }));
+  }
+}
+
+async function manejarReservaConcierto(req, res) {
+  if (!estaAutorizado(req)) {
+    res.writeHead(401, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, error: "no autorizado" }));
+    return;
+  }
+
+  let datos;
+  try {
+    datos = await leerCuerpoJSON(req);
+  } catch (err) {
+    res.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, error: "cuerpo no es JSON válido" }));
+    return;
+  }
+
+  try {
+    const resultado = await registrarReservaConcierto(datos);
+    res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: true, ...resultado }));
+  } catch (err) {
+    console.error("Error registrando reserva del concierto:", err);
+    const status = err.status || 500;
+    res
+      .writeHead(status, { "Content-Type": "application/json" })
+      .end(JSON.stringify({ ok: false, error: status === 400 ? err.message : "error interno" }));
+  }
+}
+
 async function manejarReservaPalco(req, res) {
   if (!estaAutorizado(req)) {
     res.writeHead(401, { "Content-Type": "application/json" }).end(JSON.stringify({ ok: false, error: "no autorizado" }));
@@ -393,6 +474,21 @@ const server = http.createServer((req, res) => {
 
   if (req.method === "POST" && req.url === "/validar-numero-palco") {
     manejarValidarNumeroPalco(req, res);
+    return;
+  }
+
+  if (req.method === "POST" && req.url === "/reserva-concierto-cliente") {
+    manejarReservaConciertoCliente(req, res);
+    return;
+  }
+
+  if (req.method === "POST" && req.url === "/validar-palco-concierto") {
+    manejarValidarPalcoConcierto(req, res);
+    return;
+  }
+
+  if (req.method === "POST" && req.url === "/reserva-concierto") {
+    manejarReservaConcierto(req, res);
     return;
   }
 
