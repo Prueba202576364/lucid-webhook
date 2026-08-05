@@ -13,6 +13,12 @@ const NOMBRE_CATEGORIA = {
   oro: "Oro",
   plata: "Plata",
 };
+const EMOJI_CATEGORIA = {
+  patrocinadores: "🏆",
+  diamante: "💎",
+  oro: "🥇",
+  plata: "🥈",
+};
 
 function formatearPesos(valor) {
   return `$${valor.toLocaleString("es-CO")}`;
@@ -46,12 +52,16 @@ async function obtenerDisponibilidadConcierto() {
 
     porCategoria[categoria] = { disponibles: disponibles.length, numeros: disponibles, precio };
 
+    // Con 26 palcos por categoría, listar cada número disponible en el
+    // mensaje sería un bloque de texto ilegible — solo se muestra la
+    // cantidad y el precio; el número puntual se valida más adelante,
+    // cuando la persona ya dice cuál quiere (ver validarPalcoConcierto.js).
     if (disponibles.length > 0) {
       resumenPartes.push(
-        `${NOMBRE_CATEGORIA[categoria]}: ${disponibles.length} disponibles a ${formatearPesos(precio)} (números ${listarConY(disponibles)})`
+        `${EMOJI_CATEGORIA[categoria]} ${NOMBRE_CATEGORIA[categoria]}: ${disponibles.length} disponibles — ${formatearPesos(precio)} c/u`
       );
     } else {
-      resumenPartes.push(`${NOMBRE_CATEGORIA[categoria]}: agotado`);
+      resumenPartes.push(`${EMOJI_CATEGORIA[categoria]} ${NOMBRE_CATEGORIA[categoria]}: agotado`);
     }
   }
 
@@ -69,7 +79,7 @@ async function obtenerDisponibilidadConcierto() {
     plataDisponibles: porCategoria.plata.disponibles,
     plataNumeros: listarConY(porCategoria.plata.numeros),
     plataPrecio: porCategoria.plata.precio,
-    resumenDisponibilidad: resumenPartes.join(". "),
+    resumenDisponibilidad: resumenPartes.join("\n"),
   };
 }
 
