@@ -77,7 +77,7 @@ async function obtenerDisponibilidadConcierto() {
 
     if (disponibles.length > 0) {
       resumenPartes.push(
-        `${EMOJI_CATEGORIA[categoria]} ${NOMBRE_CATEGORIA[categoria]}: ${compactarEnRangos(disponibles)}`
+        `${EMOJI_CATEGORIA[categoria]} ${NOMBRE_CATEGORIA[categoria]}: ${compactarEnRangos(disponibles)} — ${formatearPesos(precio)}`
       );
     } else {
       resumenPartes.push(`${EMOJI_CATEGORIA[categoria]} ${NOMBRE_CATEGORIA[categoria]}: agotado`);
