@@ -24,10 +24,33 @@ function formatearPesos(valor) {
   return `$${valor.toLocaleString("es-CO")}`;
 }
 
-function listarConY(numeros) {
-  if (numeros.length === 0) return "";
-  if (numeros.length === 1) return `${numeros[0]}`;
-  return `${numeros.slice(0, -1).join(", ")} y ${numeros[numeros.length - 1]}`;
+function listarConY(items) {
+  if (items.length === 0) return "";
+  if (items.length === 1) return `${items[0]}`;
+  return `${items.slice(0, -1).join(", ")} y ${items[items.length - 1]}`;
+}
+
+// Junta números consecutivos en rangos ("1 al 13, 15 al 21 y 23 al 26") en
+// vez de listarlos todos sueltos — con 26 palcos por categoría, la lista
+// plana es ilegible mientras que los rangos muestran de un vistazo cuáles
+// faltan (los huecos entre rangos).
+function compactarEnRangos(numerosOrdenados) {
+  if (numerosOrdenados.length === 0) return "";
+  const rangos = [];
+  let inicio = numerosOrdenados[0];
+  let fin = numerosOrdenados[0];
+  for (let i = 1; i < numerosOrdenados.length; i++) {
+    const n = numerosOrdenados[i];
+    if (n === fin + 1) {
+      fin = n;
+      continue;
+    }
+    rangos.push(inicio === fin ? `${inicio}` : `${inicio} al ${fin}`);
+    inicio = n;
+    fin = n;
+  }
+  rangos.push(inicio === fin ? `${inicio}` : `${inicio} al ${fin}`);
+  return listarConY(rangos);
 }
 
 async function obtenerDisponibilidadConcierto() {
@@ -52,13 +75,9 @@ async function obtenerDisponibilidadConcierto() {
 
     porCategoria[categoria] = { disponibles: disponibles.length, numeros: disponibles, precio };
 
-    // Con 26 palcos por categoría, listar cada número disponible en el
-    // mensaje sería un bloque de texto ilegible — solo se muestra la
-    // cantidad y el precio; el número puntual se valida más adelante,
-    // cuando la persona ya dice cuál quiere (ver validarPalcoConcierto.js).
     if (disponibles.length > 0) {
       resumenPartes.push(
-        `${EMOJI_CATEGORIA[categoria]} ${NOMBRE_CATEGORIA[categoria]}: ${disponibles.length} disponibles — ${formatearPesos(precio)} c/u`
+        `${EMOJI_CATEGORIA[categoria]} ${NOMBRE_CATEGORIA[categoria]}: ${compactarEnRangos(disponibles)}`
       );
     } else {
       resumenPartes.push(`${EMOJI_CATEGORIA[categoria]} ${NOMBRE_CATEGORIA[categoria]}: agotado`);
@@ -68,16 +87,16 @@ async function obtenerDisponibilidadConcierto() {
   return {
     ok: true,
     patrocinadoresDisponibles: porCategoria.patrocinadores.disponibles,
-    patrocinadoresNumeros: listarConY(porCategoria.patrocinadores.numeros),
+    patrocinadoresNumeros: compactarEnRangos(porCategoria.patrocinadores.numeros),
     patrocinadoresPrecio: porCategoria.patrocinadores.precio,
     diamanteDisponibles: porCategoria.diamante.disponibles,
-    diamanteNumeros: listarConY(porCategoria.diamante.numeros),
+    diamanteNumeros: compactarEnRangos(porCategoria.diamante.numeros),
     diamantePrecio: porCategoria.diamante.precio,
     oroDisponibles: porCategoria.oro.disponibles,
-    oroNumeros: listarConY(porCategoria.oro.numeros),
+    oroNumeros: compactarEnRangos(porCategoria.oro.numeros),
     oroPrecio: porCategoria.oro.precio,
     plataDisponibles: porCategoria.plata.disponibles,
-    plataNumeros: listarConY(porCategoria.plata.numeros),
+    plataNumeros: compactarEnRangos(porCategoria.plata.numeros),
     plataPrecio: porCategoria.plata.precio,
     resumenDisponibilidad: resumenPartes.join("\n"),
   };
